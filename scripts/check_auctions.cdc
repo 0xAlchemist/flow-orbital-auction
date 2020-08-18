@@ -20,7 +20,7 @@ pub fun main() {
     let auctionCap = account.getCapability(/public/OrbitalAuction)!
 
     if let auctionRef = auctionCap.borrow<&{OrbitalAuction.AuctionCollectionPublic}>() {
-        auctionRef.getAuctionInfo()
+        log(auctionRef.getAuctionInfo())
     } else {
         log("unable to borrow orbital auction reference")
     }
