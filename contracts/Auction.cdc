@@ -20,7 +20,8 @@ pub contract OrbitalAuction {
     // Events
     pub event NewCollectionCreated(block: UInt64)
     pub event NewAuctionCreated(id: UInt64, totalSessions: UInt64)
-    // pub event NewBid(tokenID: UInt64, bidPrice: UFix64)
+    pub event NewBid(auctionID: UInt64, address: Address, bidTotal: UFix64)
+    pub event updatedBid(auctionID: UInt64, address: Address, bidTotal: UFix64)
     // pub event AuctionSettled(tokenID: UInt64, price: UFix64)
 
     // AuctionPublic is a resource interface that restricts users to...
@@ -52,11 +53,14 @@ pub contract OrbitalAuction {
             self.meta = meta
         }
 
+        // addNewBidder adds a new Bidder resource to the auction
         access(contract) fun addNewBidder(_ bidder: @Bidder) {
             let oldBidder <- self.bidders[bidder.address] <- bidder
             destroy oldBidder
         }
 
+        // bidderExist returns false if there is no Bidder resource for the
+        // provided address, otherwise it returns true
         access(contract) fun bidderExists(_ address: Address): Bool {
             if self.bidders[address] == nil {
                 return false
@@ -64,7 +68,9 @@ pub contract OrbitalAuction {
                 return true
             }
         }
-
+        
+        // getBidders returns a dictionary with the bidder's address and
+        // bidTotal
         access(contract) fun getBidders(): {Address: UFix64} {
             let bidders = &self.bidders as &{Address: Bidder}
             let dictionary: {Address: UFix64} = {}
@@ -138,7 +144,8 @@ pub contract OrbitalAuction {
             self.bidTotal = bidTotal
             self.bidPosition = 0
         }
-
+        
+        // increaseTotal adds the provided amount to the bidder's bidTotal
         pub fun increaseTotal(amount: UFix64) {
             self.bidTotal = self.bidTotal + amount
         }
@@ -187,10 +194,11 @@ pub contract OrbitalAuction {
             emit NewAuctionCreated(id: auctionID, totalSessions: totalSessions)
         }
 
+        // borrowAuction returns a reference to the Auction with the
+        // provided ID
         pub fun borrowAuction(_ id: UInt64): &Auction {
             return &self.auctions[id] as &Auction
         }
-
 
         // newBid creates a new Bidder resource, adds it to the Auction and deposits
         // the bidder's tokens into the Auction vault
@@ -204,24 +212,23 @@ pub contract OrbitalAuction {
             // Get the auction reference
             let auctionRef = self.borrowAuction(auctionID)
 
+            // If the bidder has already bid...
             if auctionRef.bidderExists(address) {
 
-                // increase the existing Bidder's total
+                // ...increase the existing Bidder's total
                 let bidderRef = &auctionRef.bidders[address] as &Bidder
                 bidderRef.increaseTotal(amount: bidTokens.balance)
-                log("updating existing bidder")
-
+            // ... otherwise...
             } else {
-                // Create a new Bidder resource
+                // ... create a new Bidder resource
                 let newBidder <- create Bidder(
                     address: address,
                     vaultCap: vaultCap,
                     collectionCap: collectionCap,
                     bidTotal: bidTokens.balance
                 )
-
+                // ... add the new bidder to the auction
                 auctionRef.addNewBidder(<-newBidder)
-                log("creating a new bidder resource")
             }
 
             // deposit the bid tokens into the auction Vault
@@ -242,6 +249,8 @@ pub contract OrbitalAuction {
             return auctionInfo
         }
 
+        // getAuctionBidders returns a dictionary containing the bidder's address
+        // and bid total
         pub fun getAuctionBidders(_ id: UInt64): {Address: UFix64} {
             let auction = self.borrowAuction(id)
             return auction.getBidders()
