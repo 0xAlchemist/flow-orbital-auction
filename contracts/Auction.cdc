@@ -129,8 +129,8 @@ pub contract OrbitalAuction {
         pub let collectionCap: Capability<&{NonFungibleToken.CollectionPublic}>
 
         // Meta
-        access(contract) var bidTotal: UFix64
-        access(contract) var bidPosition: UInt
+        pub var bidTotal: UFix64
+        pub var bidPosition: UInt
 
         init(
             address: Address,
@@ -146,7 +146,7 @@ pub contract OrbitalAuction {
         }
         
         // increaseTotal adds the provided amount to the bidder's bidTotal
-        pub fun increaseTotal(amount: UFix64) {
+        access(contract) fun increaseTotal(amount: UFix64) {
             self.bidTotal = self.bidTotal + amount
         }
     }
