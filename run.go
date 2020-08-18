@@ -41,8 +41,21 @@ func main() {
 
 	flow.SendTransaction("setup/mint_demotokens", demoToken)
 
+	flow.SendTransaction("list/create_auction", demoToken)
+
+	flow.SendTransaction("bid/place_bid", rocks)
+	flow.SendTransaction("bid/place_bid", nonFungibleToken)
+	flow.SendTransaction("bid/place_bid", rocks)
+	flow.SendTransaction("bid/place_bid", demoToken)
+	flow.SendTransaction("bid/place_bid", rocks)
+	flow.SendTransaction("bid/place_bid", demoToken)
+	flow.SendTransaction("bid/place_bid", auction)
+	flow.SendTransaction("bid/place_bid", rocks)
+
 	// Check the balances are properly setup for the auction demo
-	flow.RunScript("check_auctions")
+	flow.RunScript("check_bidders")
+
+	// flow.RunScript("check_auctions")
 
 	// Add NFTs to the Auction collection for the DemoToken account
 	// flow.SendTransaction("list/add_nfts_to_auction", demoToken)
