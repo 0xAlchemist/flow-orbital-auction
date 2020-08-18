@@ -26,22 +26,55 @@ pub contract OrbitalAuction {
     // AuctionPublic is a resource interface that restricts users to...
     //
     pub resource interface AuctionCollectionPublic {
-        pub fun getAuctionInfo()
+        pub fun placeBid(
+            auctionID: UInt64,
+            vaultCap: Capability<&{FungibleToken.Receiver}>,
+            collectionCap: Capability<&{NonFungibleToken.CollectionPublic}>,
+            bidTokens: @FungibleToken.Vault,
+            address: Address
+        )
+        pub fun getAuctionInfo(): [&Auction]
+        pub fun getAuctionBidders(_ id: UInt64): {Address: UFix64}
     }
 
     // Auction contains the Resources and metadata for a single auction
     pub resource Auction {
-        access(contract) var totalBidders: UInt64
-        // TODO: Add Fields
-        access(contract) var bidders: @{UInt64: Bidder}
-        access(contract) var prizes: @[NonFungibleToken.NFT]
-        access(contract) var meta: Meta?
 
-        init(prizes: @[NonFungibleToken.NFT], meta: Meta) {
-            self.totalBidders = UInt64(0)
+        access(contract) var bidders: @{Address: Bidder}
+        access(contract) var prizes: @[NonFungibleToken.NFT]
+        access(contract) let vault: @FungibleToken.Vault
+        access(contract) var meta: Meta
+
+        init(prizes: @[NonFungibleToken.NFT], meta: Meta, vault: @FungibleToken.Vault) {
             self.bidders <- {}
             self.prizes <- prizes
+            self.vault <- vault
             self.meta = meta
+        }
+
+        access(contract) fun addNewBidder(_ bidder: @Bidder) {
+            let oldBidder <- self.bidders[bidder.address] <- bidder
+            destroy oldBidder
+        }
+
+        access(contract) fun bidderExists(_ address: Address): Bool {
+            if self.bidders[address] == nil {
+                return false
+            } else {
+                return true
+            }
+        }
+
+        access(contract) fun getBidders(): {Address: UFix64} {
+            let bidders = &self.bidders as &{Address: Bidder}
+            let dictionary: {Address: UFix64} = {}
+            
+            for address in bidders.keys {
+                let bidder = &bidders[address] as &Bidder
+                dictionary[address] = bidder.bidTotal
+            }
+            
+            return dictionary
         }
 
         destroy() {
@@ -49,6 +82,7 @@ pub contract OrbitalAuction {
             // FTs and NFTs back to their owners
             destroy self.bidders
             destroy self.prizes
+            destroy self.vault
         }
     }
 
@@ -81,22 +115,32 @@ pub contract OrbitalAuction {
 
     pub resource Bidder {
 
+        // Address
+        pub let address: Address
+
         // Capabilities
         pub let vaultCap: Capability<&{FungibleToken.Receiver}>
         pub let collectionCap: Capability<&{NonFungibleToken.CollectionPublic}>
 
         // Meta
         access(contract) var bidTotal: UFix64
-        access(contract) var bidPosition: Int
+        access(contract) var bidPosition: UInt
 
         init(
+            address: Address,
             vaultCap: Capability<&{FungibleToken.Receiver}>,
-            collectionCap: Capability<&{NonFungibleToken.CollectionPublic}>
+            collectionCap: Capability<&{NonFungibleToken.CollectionPublic}>,
+            bidTotal: UFix64
         ) {
+            self.address = address
             self.vaultCap = vaultCap
             self.collectionCap = collectionCap
-            self.bidTotal = UFix64(0)
+            self.bidTotal = bidTotal
             self.bidPosition = 0
+        }
+
+        pub fun increaseTotal(amount: UFix64) {
+            self.bidTotal = self.bidTotal + amount
         }
     }
 
@@ -117,7 +161,8 @@ pub contract OrbitalAuction {
         pub fun createNewAuction(
             totalSessions: UInt64,
             sessionLengthInBlocks: UInt64,
-            prizes: @[NonFungibleToken.NFT]
+            prizes: @[NonFungibleToken.NFT],
+            vault: @FungibleToken.Vault
         ) {
 
             let auctionID = self.totalAuctions + UInt64(1)
@@ -132,7 +177,8 @@ pub contract OrbitalAuction {
             // Create Auction resource
             let Auction <- create Auction(
                 prizes: <- prizes,
-                meta: AuctionMeta
+                meta: AuctionMeta,
+                vault: <-vault
             )
             
             let oldToken <- self.auctions[auctionID] <- Auction
@@ -141,13 +187,64 @@ pub contract OrbitalAuction {
             emit NewAuctionCreated(id: auctionID, totalSessions: totalSessions)
         }
 
-        pub fun getAuctionInfo() {
-            let auctions = self.auctions.keys
+        pub fun borrowAuction(_ id: UInt64): &Auction {
+            return &self.auctions[id] as &Auction
+        }
 
-            for id in auctions {
-                let auctionRef = &self.auctions[id] as &Auction
-                log(auctionRef)
+
+        // newBid creates a new Bidder resource, adds it to the Auction and deposits
+        // the bidder's tokens into the Auction vault
+        pub fun placeBid(
+            auctionID: UInt64,
+            vaultCap: Capability<&{FungibleToken.Receiver}>,
+            collectionCap: Capability<&{NonFungibleToken.CollectionPublic}>,
+            bidTokens: @FungibleToken.Vault,
+            address: Address
+        ) {
+            // Get the auction reference
+            let auctionRef = self.borrowAuction(auctionID)
+
+            if auctionRef.bidderExists(address) {
+
+                // increase the existing Bidder's total
+                let bidderRef = &auctionRef.bidders[address] as &Bidder
+                bidderRef.increaseTotal(amount: bidTokens.balance)
+                log("updating existing bidder")
+
+            } else {
+                // Create a new Bidder resource
+                let newBidder <- create Bidder(
+                    address: address,
+                    vaultCap: vaultCap,
+                    collectionCap: collectionCap,
+                    bidTotal: bidTokens.balance
+                )
+
+                auctionRef.addNewBidder(<-newBidder)
+                log("creating a new bidder resource")
             }
+
+            // deposit the bid tokens into the auction Vault
+            auctionRef.vault.deposit(from: <-bidTokens)
+        }
+
+        // getAuctionInfo returns an array of Auction references that belong to
+        // the AuctionCollection
+        pub fun getAuctionInfo(): [&Auction] {
+
+            let auctions = self.auctions.keys
+            let auctionInfo: [&Auction] = []
+            
+            for id in auctions {
+                auctionInfo.append(self.borrowAuction(id))
+            }
+
+            return auctionInfo
+        }
+
+        pub fun getAuctionBidders(_ id: UInt64): {Address: UFix64} {
+            let auction = self.borrowAuction(id)
+            return auction.getBidders()
         }
 
         destroy() {
