@@ -237,6 +237,9 @@ pub contract OrbitalAuction {
             prizes: @[NonFungibleToken.NFT],
             vault: @FungibleToken.Vault
         ) {
+            pre {
+                totalSessions <= UInt64(15): "maximum 15 sessions"
+            }
 
             let auctionID = self.totalAuctions + UInt64(1)
             
