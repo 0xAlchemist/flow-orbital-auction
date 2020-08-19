@@ -151,6 +151,72 @@ pub contract OrbitalAuction {
         }
     }
 
+    pub struct Distribution {
+        pub fun getWeights(_ n: Int): [UFix64] {
+            pre {
+                n <= 15: "maximum 15 sessions"
+            }
+            var array: [UFix64] = []
+            var i = 1
+
+            while i < n + 1 {
+                if n % i == 0 {
+                    array.append(UFix64(i) / UFix64(self.sumOfFactors(n)))
+                } else {
+                    array.append(UFix64(0))
+                }
+                i = i + 1
+            }
+            return array
+        }
+
+        pub fun sumOfFactors(_ n: Int): Int {
+            var res = 1
+            var i = 2
+            var num = n
+
+            while i <= self.sqrt(num) {
+                var currentSum = 1
+                var currentTerm = 1
+
+                while num % i == 0 {
+                    num = n / i
+                    currentTerm = currentTerm * i
+                    currentSum = currentSum + currentTerm
+                }
+
+                res = res * currentSum
+                i = i + 1
+            }
+
+            if num >= 2 {
+                res = res * 1 + num
+            }
+
+            return res
+        }
+
+        pub fun sqrt(_ n: Int): Int {
+            if n == 0 {
+                return n
+            }
+
+            if n == 1 {
+                return n
+            }
+
+            var i = 1
+            var res = 1
+
+            while res <= n {
+                i = i + 1
+                res = i * i
+            }
+
+            return i - 1
+        }
+    }
+
     pub resource AuctionCollection: AuctionCollectionPublic {
         // The total amount of Auctions in the AuctionCollection
         access(contract) var totalAuctions: UInt64
