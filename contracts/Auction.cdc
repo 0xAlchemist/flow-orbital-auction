@@ -152,22 +152,36 @@ pub contract OrbitalAuction {
     }
 
     pub struct Distribution {
-        pub fun getWeights(_ n: Int): [UFix64] {
-            pre {
-                n <= 15: "maximum 15 sessions"
-            }
-            var array: [UFix64] = []
+
+        pub(set) var weights: {Int: UFix64}
+        pub(set) var sumFactors: Int
+        pub(set) var sqrtVal: Int
+
+        init(_ session: Int) {
+            self.weights = {}
+            self.sumFactors = 0
+            self.sqrtVal = 0
+
+            self.updateFields(session)
+        }
+
+        pub fun updateFields(_ n: Int) {
+            self.sqrtVal = self.sqrt(n)
+            self.sumFactors = self.sumOfFactors(n)
+            self.weights = self.getWeights(n)
+        }
+
+        pub fun getWeights(_ n: Int): {Int: UFix64} {
+            var weights: {Int: UFix64} = {}
             var i = 1
 
             while i < n + 1 {
                 if n % i == 0 {
-                    array.append(UFix64(i) / UFix64(self.sumOfFactors(n)))
-                } else {
-                    array.append(UFix64(0))
+                    weights[i] = (UFix64(i) / UFix64(self.sumFactors + n))
                 }
                 i = i + 1
             }
-            return array
+            return weights
         }
 
         pub fun sumOfFactors(_ n: Int): Int {
@@ -175,7 +189,7 @@ pub contract OrbitalAuction {
             var i = 2
             var num = n
 
-            while i <= self.sqrt(num) {
+            while i <= self.sqrtVal {
                 var currentSum = 1
                 var currentTerm = 1
 
