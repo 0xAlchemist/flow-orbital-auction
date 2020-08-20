@@ -46,22 +46,21 @@ pub contract OrbitalAuction {
     // Auction contains the Resources and metadata for a single auction
     pub resource Auction {
 
-        access(contract) var bidders: @{Address: Bidder}
-        access(contract) var prizes: @[NonFungibleToken.NFT]
         access(contract) let vault: @FungibleToken.Vault
+        access(contract) var prizes: @[NonFungibleToken.NFT]
+        access(contract) var bidders: {Address: Bidder}
         access(contract) var meta: Meta
 
         init(prizes: @[NonFungibleToken.NFT], meta: Meta, vault: @FungibleToken.Vault) {
-            self.bidders <- {}
-            self.prizes <- prizes
             self.vault <- vault
+            self.prizes <- prizes
+            self.bidders = {}
             self.meta = meta
         }
 
         // addNewBidder adds a new Bidder resource to the auction
-        access(contract) fun addNewBidder(_ bidder: @Bidder) {
-            let oldBidder <- self.bidders[bidder.address] <- bidder
-            destroy oldBidder
+        access(contract) fun addNewBidder(_ bidder: Bidder) {
+            self.bidders[bidder.address] = bidder
         }
 
         // bidderExist returns false if there is no Bidder resource for the
@@ -109,7 +108,6 @@ pub contract OrbitalAuction {
         destroy() {
             // TODO: Safely destroy the auction resources by sending
             // FTs and NFTs back to their owners
-            destroy self.bidders
             destroy self.prizes
             destroy self.vault
         }
@@ -142,7 +140,7 @@ pub contract OrbitalAuction {
         }
     }
 
-    pub resource Bidder {
+    pub struct Bidder {
 
         // Address
         pub let address: Address
@@ -247,14 +245,14 @@ pub contract OrbitalAuction {
             // ... otherwise...
             } else {
                 // ... create a new Bidder resource
-                let newBidder <- create Bidder(
+                let newBidder = Bidder(
                     address: address,
                     vaultCap: vaultCap,
                     collectionCap: collectionCap,
                     bidTotal: bidTokens.balance
                 )
                 // ... add the new bidder to the auction
-                auctionRef.addNewBidder(<-newBidder)
+                auctionRef.addNewBidder(newBidder)
             }
 
             // deposit the bid tokens into the auction Vault
