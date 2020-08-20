@@ -48,11 +48,11 @@ transaction {
         // get the public reference to the AuctionCollection
         let auctionCap = seller.getCapability(/public/OrbitalAuction)!
 
-        if auctionCap.check<&{OrbitalAuction.AuctionCollectionPublic}>() == nil {
+        if auctionCap.check<&{OrbitalAuction.AuctionPublic}>() == nil {
             panic("new_bid.cdc: seller has no auction available")
         }
 
-        let auctionRef = auctionCap.borrow<&{OrbitalAuction.AuctionCollectionPublic}>()!
+        let auctionRef = auctionCap.borrow<&{OrbitalAuction.AuctionPublic}>()!
 
         auctionRef.placeBid(
             auctionID: UInt64(1),

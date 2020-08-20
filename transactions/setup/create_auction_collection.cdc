@@ -21,7 +21,7 @@ transaction {
 
         // create a public capability to the sale so that others
         // can call it's methods
-        account.link<&{OrbitalAuction.AuctionCollectionPublic}>(
+        account.link<&{OrbitalAuction.AuctionPublic}>(
             /public/OrbitalAuction,
             target: /storage/OrbitalAuction
         )

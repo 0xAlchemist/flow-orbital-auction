@@ -18,7 +18,7 @@ pub fun main() {
     // and borrowing a reference from the capability
     let auctionCap = account.getCapability(/public/OrbitalAuction)!
 
-    if let auctionRef = auctionCap.borrow<&{OrbitalAuction.AuctionCollectionPublic}>() {
+    if let auctionRef = auctionCap.borrow<&{OrbitalAuction.AuctionPublic}>() {
         log("Current Bidders")
         log(auctionRef.getAuctionBidders(UInt64(1)))
     } else {
