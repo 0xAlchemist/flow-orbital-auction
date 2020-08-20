@@ -54,8 +54,6 @@ func main() {
 
 	flow.RunScript("check_auctions")
 
-	wait()
-
 	flow.SendTransaction("bid/place_bid", rocks)
 	flow.SendTransaction("bid/place_bid", nonFungibleToken)
 	flow.SendTransaction("bid/place_bid", rocks)
@@ -75,15 +73,11 @@ func main() {
 
 	flow.RunScript("check_auctions")
 
-	wait()
-
 	// Check the balances are properly setup for the auction demo
 	flow.RunScript("check_bidders")
 
 	// Check receiver before payout tokens
 	flow.RunScript("check_account")
-
-	wait()
 
 	// Test paying out tokens
 	flow.SendTransaction("payout/payout_tokens", demoToken)
@@ -91,15 +85,11 @@ func main() {
 	// Check receiver after payout tokens
 	flow.RunScript("check_account")
 
-	wait()
-
 	// Test paying out a prize
 	flow.SendTransaction("payout/payout_prize", demoToken)
 
 	// Check receiver after payout prize
 	flow.RunScript("check_account")
-
-	wait()
 
 	flow.RunScript("check_auctions")
 }
