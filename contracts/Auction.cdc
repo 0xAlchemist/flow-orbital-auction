@@ -26,7 +26,7 @@ pub contract OrbitalAuction {
 
     // AuctionPublic is a resource interface that restricts users to...
     //
-    pub resource interface AuctionCollectionPublic {
+    pub resource interface AuctionPublic {
         pub fun placeBid(
             auctionID: UInt64,
             vaultCap: Capability<&{FungibleToken.Receiver}>,
@@ -35,7 +35,12 @@ pub contract OrbitalAuction {
             address: Address
         )
         pub fun getAuctionInfo(): [&Auction]
-        pub fun getAuctionBidders(_ id: UInt64): {Address: UFix64}
+        pub fun getAuctionBidders(_ auctionID: UInt64): {Address: UFix64}
+    }
+
+    pub resource interface AuctionAdmin {
+        pub fun sendPayout(_ auctionID: UInt64, address: Address, amount: UFix64)
+        pub fun sendPrize(_ auctionID: UInt64, address: Address, position: UInt64)
     }
 
     // Auction contains the Resources and metadata for a single auction
@@ -81,6 +86,24 @@ pub contract OrbitalAuction {
             }
             
             return dictionary
+        }
+
+        pub fun sendTokensToBidder(address: Address, amount: UFix64) {
+            var receiver = &self.bidders[address] as &Bidder
+
+            if let vault = receiver.vaultCap.borrow() {
+                let tokens <- self.vault.withdraw(amount: amount)
+                vault.deposit(from: <- tokens)
+            }
+        }
+
+        pub fun sendPrizeToBidder(address: Address, position: UInt64) {
+            var receiver = &self.bidders[address] as &Bidder
+
+            if let collection = receiver.collectionCap.borrow() {
+                let NFT <- self.prizes.remove(at: position)
+                collection.deposit(token: <-NFT)
+            }
         }
 
         destroy() {
@@ -151,87 +174,7 @@ pub contract OrbitalAuction {
         }
     }
 
-    pub struct Distribution {
-
-        pub(set) var weights: {Int: UFix64}
-        pub(set) var sumFactors: Int
-        pub(set) var sqrtVal: Int
-
-        init(_ session: Int) {
-            self.weights = {}
-            self.sumFactors = 0
-            self.sqrtVal = 0
-
-            self.updateFields(session)
-        }
-
-        pub fun updateFields(_ n: Int) {
-            self.sqrtVal = self.sqrt(n)
-            self.sumFactors = self.sumOfFactors(n)
-            self.weights = self.getWeights(n)
-        }
-
-        pub fun getWeights(_ n: Int): {Int: UFix64} {
-            var weights: {Int: UFix64} = {}
-            var i = 1
-
-            while i < n + 1 {
-                if n % i == 0 {
-                    weights[i] = (UFix64(i) / UFix64(self.sumFactors + n))
-                }
-                i = i + 1
-            }
-            return weights
-        }
-
-        pub fun sumOfFactors(_ n: Int): Int {
-            var res = 1
-            var i = 2
-            var num = n
-
-            while i <= self.sqrtVal {
-                var currentSum = 1
-                var currentTerm = 1
-
-                while num % i == 0 {
-                    num = n / i
-                    currentTerm = currentTerm * i
-                    currentSum = currentSum + currentTerm
-                }
-
-                res = res * currentSum
-                i = i + 1
-            }
-
-            if num >= 2 {
-                res = res * 1 + num
-            }
-
-            return res
-        }
-
-        pub fun sqrt(_ n: Int): Int {
-            if n == 0 {
-                return n
-            }
-
-            if n == 1 {
-                return n
-            }
-
-            var i = 1
-            var res = 1
-
-            while res <= n {
-                i = i + 1
-                res = i * i
-            }
-
-            return i - 1
-        }
-    }
-
-    pub resource AuctionCollection: AuctionCollectionPublic {
+    pub resource AuctionCollection: AuctionPublic, AuctionAdmin {
         // The total amount of Auctions in the AuctionCollection
         access(contract) var totalAuctions: UInt64
 
@@ -279,8 +222,8 @@ pub contract OrbitalAuction {
 
         // borrowAuction returns a reference to the Auction with the
         // provided ID
-        pub fun borrowAuction(_ id: UInt64): &Auction {
-            return &self.auctions[id] as &Auction
+        pub fun borrowAuction(_ auctionID: UInt64): &Auction {
+            return &self.auctions[auctionID] as &Auction
         }
 
         // newBid creates a new Bidder resource, adds it to the Auction and deposits
@@ -318,6 +261,26 @@ pub contract OrbitalAuction {
             auctionRef.vault.deposit(from: <-bidTokens)
         }
 
+        pub fun sendPayout(_ auctionID: UInt64, address: Address, amount: UFix64) {
+            let auctionRef = self.borrowAuction(auctionID)
+
+            if auctionRef.vault.balance < amount { 
+                panic("auction vault balance is less than transaction amount") 
+            }
+
+            auctionRef.sendTokensToBidder(address: address, amount: amount)
+        }
+
+        pub fun sendPrize(_ auctionID: UInt64, address: Address, position: UInt64) {
+            let auctionRef = self.borrowAuction(auctionID)
+
+            if auctionRef.prizes[position] == nil {
+                panic("prize does not exist")
+            }
+
+            auctionRef.sendPrizeToBidder(address: address, position: position)
+        }
+
         // getAuctionInfo returns an array of Auction references that belong to
         // the AuctionCollection
         pub fun getAuctionInfo(): [&Auction] {
@@ -334,8 +297,8 @@ pub contract OrbitalAuction {
 
         // getAuctionBidders returns a dictionary containing the bidder's address
         // and bid total
-        pub fun getAuctionBidders(_ id: UInt64): {Address: UFix64} {
-            let auction = self.borrowAuction(id)
+        pub fun getAuctionBidders(_ auctionID: UInt64): {Address: UFix64} {
+            let auction = self.borrowAuction(auctionID)
             return auction.getBidders()
         }
 
