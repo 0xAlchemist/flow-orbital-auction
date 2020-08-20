@@ -1,6 +1,8 @@
 package main
 
 import (
+	"time"
+
 	"github.com/0xAlchemist/go-flow-tooling/tooling"
 )
 
@@ -10,6 +12,13 @@ const rocks = "Rocks"
 const auction = "Auction"
 
 const amountNFTs = 10
+
+// wait pauses the script for 10 seconds
+// - for reading the log output
+//
+func wait() {
+	time.Sleep(time.Second * 10)
+}
 
 func main() {
 	flow := tooling.NewFlowConfigLocalhost()
@@ -43,6 +52,18 @@ func main() {
 
 	flow.SendTransaction("list/create_auction", demoToken)
 
+	flow.RunScript("check_auctions")
+
+	wait()
+
+	flow.SendTransaction("bid/place_bid", rocks)
+	flow.SendTransaction("bid/place_bid", nonFungibleToken)
+	flow.SendTransaction("bid/place_bid", rocks)
+	flow.SendTransaction("bid/place_bid", demoToken)
+	flow.SendTransaction("bid/place_bid", rocks)
+	flow.SendTransaction("bid/place_bid", demoToken)
+	flow.SendTransaction("bid/place_bid", auction)
+	flow.SendTransaction("bid/place_bid", rocks)
 	flow.SendTransaction("bid/place_bid", rocks)
 	flow.SendTransaction("bid/place_bid", nonFungibleToken)
 	flow.SendTransaction("bid/place_bid", rocks)
@@ -52,31 +73,33 @@ func main() {
 	flow.SendTransaction("bid/place_bid", auction)
 	flow.SendTransaction("bid/place_bid", rocks)
 
+	flow.RunScript("check_auctions")
+
+	wait()
+
 	// Check the balances are properly setup for the auction demo
 	flow.RunScript("check_bidders")
 
-	// flow.RunScript("check_auctions")
+	// Check receiver before payout tokens
+	flow.RunScript("check_account")
 
-	// Add NFTs to the Auction collection for the DemoToken account
-	// flow.SendTransaction("list/add_nfts_to_auction", demoToken)
+	wait()
 
-	// Check the auction sale data for the DemoToken account
-	// flow.RunScript("check_sales_listings")
+	// Test paying out tokens
+	flow.SendTransaction("payout/payout_tokens", demoToken)
 
-	// flow.SendTransaction("buy/bid", rocks)
+	// Check receiver after payout tokens
+	flow.RunScript("check_account")
 
-	// flow.RunScript("check_sales_listings")
+	wait()
 
-	// flow.RunScript("check_setup")
+	// Test paying out a prize
+	flow.SendTransaction("payout/payout_prize", demoToken)
 
-	// flow.SendTransaction("buy/settle", demoToken)
-	// flow.SendTransaction("buy/settle", demoToken)
-	// flow.SendTransaction("buy/settle", demoToken)
+	// Check receiver after payout prize
+	flow.RunScript("check_account")
 
-	// flow.RunScript("check_sales_listings")
+	wait()
 
-	// flow.RunScript("check_setup")
-
-	// this should panic - "auction has already completed"
-	// flow.SendTransaction("buy/bid", rocks)
+	flow.RunScript("check_auctions")
 }
