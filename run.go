@@ -92,4 +92,10 @@ func main() {
 	flow.RunScript("check_account")
 
 	flow.RunScript("check_auctions")
+
+	for {
+		flow.SendTransaction("run/check_update_epoch", demoToken)
+		flow.RunScript("check_epoch")
+		time.Sleep(time.Second)
+	}
 }
