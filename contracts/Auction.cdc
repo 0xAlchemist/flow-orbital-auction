@@ -36,26 +36,38 @@ pub contract OrbitalAuction {
         )
         pub fun getAuctionInfo(): [&Auction]
         pub fun getAuctionBidders(_ auctionID: UInt64): {Address: UFix64}
+        pub fun logCurrentEpochInfo(_ auctionID: UInt64)
     }
 
     pub resource interface AuctionAdmin {
-        pub fun sendPayout(_ auctionID: UInt64, address: Address, amount: UFix64)
-        pub fun sendPrize(_ auctionID: UInt64, address: Address, position: UInt64)
+        pub fun checkIsNextEpoch(_ auctionID: UInt64)
+        pub fun startNewEpoch(_ auctionID: UInt64)
+        pub fun sendPayout(_ auctionID: UInt64, epoch: UInt64, address: Address, amount: UFix64)
+        pub fun sendPrize(_ auctionID: UInt64, address: Address, epoch: UInt64)
     }
 
     // Auction contains the Resources and metadata for a single auction
     pub resource Auction {
-
-        access(contract) let vault: @FungibleToken.Vault
-        access(contract) var prizes: @[NonFungibleToken.NFT]
+        /* TODO:
+        prizes should be a resource with receiver capability */
+        access(contract) var epochs: @{UInt64: Epoch}
+        access(contract) var prizes: @[NonFungibleToken.NFT] 
         access(contract) var bidders: {Address: Bidder}
         access(contract) var meta: Meta
 
-        init(prizes: @[NonFungibleToken.NFT], meta: Meta, vault: @FungibleToken.Vault) {
-            self.vault <- vault
+        init(epoch: @Epoch, prizes: @[NonFungibleToken.NFT], meta: Meta) {
+            self.epochs <- {UInt64(1): <-epoch}
             self.prizes <- prizes
             self.bidders = {}
             self.meta = meta
+        }
+
+        pub fun borrowCurrentEpoch(): &Epoch {
+            return &self.epochs[self.meta.currentEpoch] as &Epoch
+        }
+
+        pub fun borrowEpoch(_ epoch: UInt64): &Epoch {
+            return &self.epochs[epoch] as &Epoch
         }
 
         // addNewBidder adds a new Bidder resource to the auction
@@ -88,19 +100,20 @@ pub contract OrbitalAuction {
         }
 
         pub fun sendTokensToBidder(address: Address, amount: UFix64) {
-            var receiver = &self.bidders[address] as &Bidder
-
+            let receiver = &self.bidders[address] as &Bidder
+            
             if let vault = receiver.vaultCap.borrow() {
-                let tokens <- self.vault.withdraw(amount: amount)
+                let epoch = &self.epochs[self.meta.currentEpoch] as &Epoch
+                let tokens <- epoch.vault.withdraw(amount: amount)
                 vault.deposit(from: <- tokens)
             }
         }
 
-        pub fun sendPrizeToBidder(address: Address, position: UInt64) {
-            var receiver = &self.bidders[address] as &Bidder
+        pub fun sendPrizeToBidder(address: Address, epoch: UInt64) {
+            let receiver = &self.bidders[address] as &Bidder
 
             if let collection = receiver.collectionCap.borrow() {
-                let NFT <- self.prizes.remove(at: position)
+                let NFT <- self.prizes.remove(at: epoch)
                 collection.deposit(token: <-NFT)
             }
         }
@@ -109,6 +122,22 @@ pub contract OrbitalAuction {
             // TODO: Safely destroy the auction resources by sending
             // FTs and NFTs back to their owners
             destroy self.prizes
+        }
+    }
+
+    pub resource Epoch {
+
+        pub let id: UInt64
+        pub let endBlock: UInt64
+        access(contract) let vault: @FungibleToken.Vault
+
+        init(id: UInt64, endBlock: UInt64, vault: @FungibleToken.Vault) {
+            self.id = id
+            self.endBlock = endBlock
+            self.vault <- vault
+        }
+
+        destroy() {
             destroy self.vault
         }
     }
@@ -118,12 +147,12 @@ pub contract OrbitalAuction {
 
         // Auction Settings
         pub let auctionID: UInt64
-        pub let totalSessions: UInt64
-        pub let sessionLengthInBlocks: UInt64
+        pub let totalEpochs: UInt64
+        pub let epochLength: UInt64
 
         // Auction State
-        pub(set) var sessionStartBlock: UInt64
-        pub(set) var currentSession: UInt64
+        pub(set) var epochStartBlock: UInt64
+        pub(set) var currentEpoch: UInt64
         pub(set) var auctionCompleted: Bool
 
         init(
@@ -132,10 +161,10 @@ pub contract OrbitalAuction {
             sessionLengthInBlocks: UInt64
         ) {
             self.auctionID = auctionID
-            self.totalSessions = totalSessions
-            self.sessionLengthInBlocks = sessionLengthInBlocks
-            self.sessionStartBlock = getCurrentBlock().height
-            self.currentSession = UInt64(1)
+            self.totalEpochs = totalSessions
+            self.epochLength = sessionLengthInBlocks
+            self.epochStartBlock = getCurrentBlock().height
+            self.currentEpoch = UInt64(1)
             self.auctionCompleted = false
         }
     }
@@ -204,12 +233,18 @@ pub contract OrbitalAuction {
                 totalSessions: totalSessions,
                 sessionLengthInBlocks: sessionLengthInBlocks
             )
+
+            let Epoch <- create Epoch(
+                id: UInt64(1),
+                endBlock: getCurrentBlock().height + sessionLengthInBlocks,
+                vault: <-vault
+            )
             
             // Create Auction resource
             let Auction <- create Auction(
+                epoch: <- Epoch,
                 prizes: <- prizes,
-                meta: AuctionMeta,
-                vault: <-vault
+                meta: AuctionMeta
             )
             
             let oldToken <- self.auctions[auctionID] <- Auction
@@ -256,27 +291,66 @@ pub contract OrbitalAuction {
             }
 
             // deposit the bid tokens into the auction Vault
-            auctionRef.vault.deposit(from: <-bidTokens)
+            let epoch = auctionRef.borrowCurrentEpoch()
+            epoch.vault.deposit(from: <-bidTokens)
         }
 
-        pub fun sendPayout(_ auctionID: UInt64, address: Address, amount: UFix64) {
+        pub fun checkIsNextEpoch(_ auctionID: UInt64) {
+            let auctionRef = self.borrowAuction(auctionID)
+            let epoch = auctionRef.borrowCurrentEpoch()
+            let currentBlock = getCurrentBlock().height
+
+            if currentBlock >= epoch.endBlock {
+                self.handleEndOfEpoch(auctionID)
+            }
+        }
+
+        pub fun handleEndOfEpoch(_ auctionID: UInt64) {
             let auctionRef = self.borrowAuction(auctionID)
 
-            if auctionRef.vault.balance < amount { 
+            if auctionRef.meta.currentEpoch >= auctionRef.meta.totalEpochs {
+                auctionRef.meta.auctionCompleted = true
+            } else {
+                self.startNewEpoch(auctionID)
+            }
+        }
+
+        pub fun startNewEpoch(_ auctionID: UInt64) {
+            let auctionRef = self.borrowAuction(auctionID)
+            let currentEpoch = auctionRef.borrowCurrentEpoch()
+
+            let newEpochID = currentEpoch.id + UInt64(1)
+            
+            let NewEpoch <- create Epoch(
+                id: newEpochID,
+                endBlock: getCurrentBlock().height + auctionRef.meta.epochLength,
+                vault: <- currentEpoch.vault.withdraw(amount: UFix64(0))
+            )
+
+            auctionRef.meta.currentEpoch = newEpochID
+            auctionRef.epochs[newEpochID] <-! NewEpoch
+        }
+
+        pub fun sendPayout(_ auctionID: UInt64, epoch: UInt64, address: Address, amount: UFix64) {
+            let auctionRef = self.borrowAuction(auctionID)
+            let epoch = auctionRef.borrowEpoch(epoch)
+
+            if epoch.vault.balance < amount { 
                 panic("auction vault balance is less than transaction amount") 
             }
 
             auctionRef.sendTokensToBidder(address: address, amount: amount)
         }
 
-        pub fun sendPrize(_ auctionID: UInt64, address: Address, position: UInt64) {
+        pub fun sendPrize(_ auctionID: UInt64, address: Address, epoch: UInt64) {
             let auctionRef = self.borrowAuction(auctionID)
+            let epochIndex = epoch - UInt64(1)
 
-            if auctionRef.prizes[position] == nil {
+            if auctionRef.prizes[epoch] == nil {
                 panic("prize does not exist")
             }
 
-            auctionRef.sendPrizeToBidder(address: address, position: position)
+            auctionRef.sendPrizeToBidder(address: address, epoch: epoch)
         }
 
         // getAuctionInfo returns an array of Auction references that belong to
@@ -291,6 +365,20 @@ pub contract OrbitalAuction {
             }
 
             return auctionInfo
+        }
+
+        pub fun logCurrentEpochInfo(_ auctionID: UInt64) {
+            let auctionRef = self.borrowAuction(auctionID)
+            let epoch = auctionRef.borrowCurrentEpoch()
+
+            log("*************")
+            log("Current Epoch")
+            log(epoch.id)
+            log("End Block")
+            log(epoch.endBlock)
+            log("Vault Balance")
+            log(epoch.vault.balance)
+            log("*************")
         }
 
         // getAuctionBidders returns a dictionary containing the bidder's address
