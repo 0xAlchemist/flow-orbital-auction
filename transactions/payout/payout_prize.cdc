@@ -20,6 +20,6 @@ transaction {
     }
 
     execute {
-        self.auctionRef.sendPrize(1, address: self.receiverAddress, position: UInt64(1))
+        self.auctionRef.sendPrize(1, address: self.receiverAddress, epoch: UInt64(1))
     }
 }

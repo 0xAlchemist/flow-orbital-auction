@@ -20,7 +20,7 @@ transaction {
     }
 
     execute {
-        self.auctionRef.sendPayout(1, address: self.receiverAddress, amount: UFix64(40))
+        self.auctionRef.sendPayout(1, epoch: UInt64(1), address: self.receiverAddress, amount: UFix64(40))
     }
 }
  
