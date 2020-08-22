@@ -21,11 +21,11 @@ transaction {
 
         let tokenIDs = collectionRef.getIDs()
 
-        var prizes: @[NonFungibleToken.NFT] <- []
+        // var prizes: @[NonFungibleToken.NFT] <- []
         
-        for id in tokenIDs {
-            prizes.append(<-collectionRef.withdraw(withdrawID: id))
-        }
+        // for id in tokenIDs {
+        //     prizes.append(<-collectionRef.withdraw(withdrawID: id))
+        // }
 
         let vault <- DemoToken.createEmptyVault()
 
@@ -33,7 +33,6 @@ transaction {
         orbitalRef.createNewAuction(
             totalSessions: UInt64(10),
             sessionLengthInBlocks: UInt64(30),
-            prizes: <-prizes,
             vault: <-vault
         )
     }

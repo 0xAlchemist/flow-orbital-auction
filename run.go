@@ -80,16 +80,16 @@ func main() {
 	flow.RunScript("check_account")
 
 	// Test paying out tokens
-	flow.SendTransaction("payout/payout_tokens", demoToken)
+	// flow.SendTransaction("payout/payout_tokens", demoToken)
 
-	// Check receiver after payout tokens
-	flow.RunScript("check_account")
+	// // Check receiver after payout tokens
+	// flow.RunScript("check_account")
 
-	// Test paying out a prize
-	flow.SendTransaction("payout/payout_prize", demoToken)
+	// // Test paying out a prize
+	// flow.SendTransaction("payout/payout_prize", demoToken)
 
-	// Check receiver after payout prize
-	flow.RunScript("check_account")
+	// // Check receiver after payout prize
+	// flow.RunScript("check_account")
 
 	flow.RunScript("check_auctions")
 
