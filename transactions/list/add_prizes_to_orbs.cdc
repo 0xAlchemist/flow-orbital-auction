@@ -20,24 +20,17 @@ transaction {
         
         let collectionRef = account.borrow<&NonFungibleToken.Collection>(from: /storage/RockCollection)!
 
-        let tokenIDs = collectionRef.getIDs()
-
         let tempCollection <- Rocks.createEmptyCollection()
 
         for id in collectionRef.getIDs() {
             let token <- collectionRef.withdraw(withdrawID: id)
             tempCollection.deposit(token: <-token)
         }
-
-        let vault <- DemoToken.createEmptyVault()
+        
+        orbitalRef.addPrizeCollectionToAuction(UInt64(1), collection: <-tempCollection)
 
         // store the sale resource in the account for storage
-        orbitalRef.createNewAuction(
-            totalEpochs: UInt64(15),
-            epochLengthInBlocks: UInt64(12),
-            vault: <-vault,
-            prizes: <-tempCollection
-        )
+        
     }
 }
  
