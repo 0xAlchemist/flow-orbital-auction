@@ -31,8 +31,8 @@ transaction {
 
         // store the sale resource in the account for storage
         orbitalRef.createNewAuction(
-            totalSessions: UInt64(30),
-            sessionLengthInBlocks: UInt64(30),
+            totalEpochs: UInt64(12),
+            epochLengthInBlocks: UInt64(30),
             vault: <-vault
         )
     }
