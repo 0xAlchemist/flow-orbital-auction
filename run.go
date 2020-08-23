@@ -54,48 +54,24 @@ func main() {
 
 	flow.RunScript("check_auctions")
 
-	flow.SendTransaction("bid/place_bid", rocks)
-	flow.SendTransaction("bid/place_bid", nonFungibleToken)
-	flow.SendTransaction("bid/place_bid", rocks)
-	flow.SendTransaction("bid/place_bid", demoToken)
-	flow.SendTransaction("bid/place_bid", rocks)
-	flow.SendTransaction("bid/place_bid", demoToken)
-	flow.SendTransaction("bid/place_bid", auction)
-	flow.SendTransaction("bid/place_bid", rocks)
-	flow.SendTransaction("bid/place_bid", rocks)
-	flow.SendTransaction("bid/place_bid", nonFungibleToken)
-	flow.SendTransaction("bid/place_bid", rocks)
-	flow.SendTransaction("bid/place_bid", demoToken)
-	flow.SendTransaction("bid/place_bid", rocks)
-	flow.SendTransaction("bid/place_bid", demoToken)
-	flow.SendTransaction("bid/place_bid", auction)
-	flow.SendTransaction("bid/place_bid", rocks)
+	for i := 0; i < 119; i++ {
+		flow.SendTransaction("bid/place_bid", rocks)
+		flow.SendTransaction("bid/place_bid", nonFungibleToken)
+		flow.SendTransaction("bid/place_bid", rocks)
+		flow.SendTransaction("bid/place_bid", demoToken)
+		flow.SendTransaction("bid/place_bid", rocks)
+		flow.SendTransaction("bid/place_bid", demoToken)
+		flow.SendTransaction("bid/place_bid", auction)
+		flow.SendTransaction("bid/place_bid", rocks)
+
+		// time.Sleep(time.Second)
+	}
 
 	flow.RunScript("check_auctions")
-
 	// Check the balances are properly setup for the auction demo
 	flow.RunScript("check_bidders")
 
-	// Check receiver before payout tokens
-	flow.RunScript("check_account")
+	flow.RunScript("check_epoch")
 
-	// Test paying out tokens
-	// flow.SendTransaction("payout/payout_tokens", demoToken)
-
-	// // Check receiver after payout tokens
-	// flow.RunScript("check_account")
-
-	// // Test paying out a prize
-	// flow.SendTransaction("payout/payout_prize", demoToken)
-
-	// // Check receiver after payout prize
-	// flow.RunScript("check_account")
-
-	flow.RunScript("check_auctions")
-
-	for {
-		flow.SendTransaction("run/check_update_epoch", demoToken)
-		flow.RunScript("check_epoch")
-		time.Sleep(time.Second)
-	}
+	flow.RunScript("check_orbs")
 }

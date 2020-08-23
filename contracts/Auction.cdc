@@ -37,10 +37,11 @@ pub contract OrbitalAuction {
         pub fun getAuctionInfo(): [&Auction]
         pub fun getAuctionBidders(_ auctionID: UInt64): {Address: UFix64}
         pub fun logCurrentEpochInfo(_ auctionID: UInt64)
+        pub fun logOrbInfo(auctionID: UInt64, orbID: UInt64)
+        pub fun logAllOrbInfo(auctionID: UInt64)
     }
 
-    
-     pub resource interface AuctionAdmin {
+    pub resource interface AuctionAdmin {
         pub fun checkIsNextEpoch(_ auctionID: UInt64)
         pub fun startNewEpoch(_ auctionID: UInt64)
         // pub fun sendPayout(_ auctionID: UInt64, epoch: UInt64, address: Address, amount: UFix64)
@@ -116,20 +117,58 @@ pub contract OrbitalAuction {
 
                 // ...increase the existing Bidder's total
                 let bidderRef = &auctionRef.bidders[address] as &Bidder
-                bidderRef.bidVault.deposit(from: <-bidTokens)
+
+                let vault = &bidderRef.bidVault as &FungibleToken.Vault
+
+                if vault == nil {
+
+                    auctionRef.addNewBidder(
+                        address: address,
+                        bidVault: <-bidTokens,
+                        vaultCap: vaultCap,
+                        collectionCap: collectionCap
+                    )
+
+                } else {
+
+                    bidderRef.bidVault.deposit(from: <-bidTokens)
+
+                }
 
             // ... otherwise...
             } else {
                 // ... create a new Bidder resource
-                let newBidder <- create Bidder(
+                auctionRef.addNewBidder(
                     address: address,
                     bidVault: <-bidTokens,
                     vaultCap: vaultCap,
                     collectionCap: collectionCap
                 )
-                // ... add the new bidder to the auction
-                auctionRef.addNewBidder(<-newBidder)
             }
+
+            self.checkIsNextEpoch(auctionID)
+        }
+
+        pub fun getHighestBidder(_ auctionID: UInt64): @Bidder {
+            let auctionRef = self.borrowAuction(auctionID)
+            let bidders = &auctionRef.bidders as &{Address: Bidder}
+
+            if bidders.length == 0 { log("there are no bidders") }
+
+            var highestBidderAddress = bidders.keys[0] 
+
+            for address in bidders.keys {
+                let highBidder = &bidders[highestBidderAddress] as &Bidder
+                let checkedBidder = &bidders[address] as &Bidder
+
+                if checkedBidder.bidVault.balance > highBidder.bidVault.balance {
+                    highestBidderAddress = address
+                }
+            }
+            
+            let highestBidder <- bidders[highestBidderAddress] <- nil
+
+            return <- highestBidder!
         }
 
         pub fun checkIsNextEpoch(_ auctionID: UInt64) {
@@ -138,16 +177,37 @@ pub contract OrbitalAuction {
             let currentBlock = getCurrentBlock().height
 
             if currentBlock >= epoch.endBlock {
-                self.handleEndOfEpoch(auctionID)
+                if !auctionRef.meta.auctionCompleted {
+                    self.handleEndOfEpoch(auctionID)
+                }
             }
         }
 
         pub fun handleEndOfEpoch(_ auctionID: UInt64) {
             let auctionRef = self.borrowAuction(auctionID)
 
+            log("handleEndOfEpoch")
+            log(auctionRef.getBidders())
+
+            // TODO: Handle case if there are no bids?
+            let orb = auctionRef.borrowOrb(auctionRef.meta.currentEpoch)
+            let highestBidder <- self.getHighestBidder(auctionID)
+            let bidAmount = highestBidder.bidVault.balance
+
+            let bidderTokens <- highestBidder.bidVault.withdraw(amount: bidAmount)
+
+            auctionRef.distributeBidTokens(<-bidderTokens)
+
+            orb.assignOwner(bidder: <-highestBidder)
+
+            self.logCurrentEpochInfo(auctionID)
+
             if auctionRef.meta.currentEpoch >= auctionRef.meta.totalEpochs {
+
                 auctionRef.meta.auctionCompleted = true
+
             } else {
+
                 self.startNewEpoch(auctionID)
             }
         }
@@ -166,28 +226,6 @@ pub contract OrbitalAuction {
             auctionRef.meta.currentEpoch = newEpochID
             auctionRef.epochs[newEpochID] = NewEpoch
         }
-
-        // pub fun sendPayout(_ auctionID: UInt64, epoch: UInt64, address: Address, amount: UFix64) {
-        //     let auctionRef = self.borrowAuction(auctionID)
-        //     let epoch = auctionRef.borrowEpoch(epoch)
-
-        //     if epoch.vault.balance < amount { 
-        //         panic("auction vault balance is less than transaction amount") 
-        //     }
-
-        //     auctionRef.sendTokensToBidder(address: address, amount: amount)
-        // }
-
-        // pub fun sendPrize(_ auctionID: UInt64, address: Address, epoch: UInt64) {
-        //     let auctionRef = self.borrowAuction(auctionID)
-        //     let epochIndex = epoch - UInt64(1)
-
-        //     if auctionRef.prizes[epoch] == nil {
-        //         panic("prize does not exist")
-        //     }
-
-        //     auctionRef.sendPrizeToBidder(address: address, epoch: epoch)
-        // }
 
         // getAuctionInfo returns an array of Auction references that belong to
         // the AuctionCollection
@@ -215,6 +253,36 @@ pub contract OrbitalAuction {
             log(getCurrentBlock().height)
             log("End Block")
             log(epoch.endBlock)
+            log("Distribution")
+            log(epoch.distribution)
+        }
+
+        pub fun logOrbInfo(auctionID: UInt64, orbID: UInt64) {
+            let auctionRef = self.borrowAuction(auctionID)
+            let orb = auctionRef.borrowOrb(orbID)
+            
+            log("*************")
+            log("Orb ID")
+            log(orb.id)
+            log("***")
+            if let orbOwner = orb.bidder?.address {
+                log("Orb Owner")
+                log(orbOwner)
+            } else {
+                log("Orb is unowned")
+            }
+            log("***")
+            log("Orb Balance")
+            log(orb.vault.balance)
+        }
+
+        pub fun logAllOrbInfo(auctionID: UInt64) {
+            let auctionRef = self.borrowAuction(auctionID)
+            let orbs = auctionRef.orbs.keys
+
+            for id in orbs {
+                let orb = self.logOrbInfo(auctionID: auctionID, orbID: id)
+            }
         }
 
         // getAuctionBidders returns a dictionary containing the bidder's address
@@ -279,8 +347,20 @@ pub contract OrbitalAuction {
         }
 
         // addNewBidder adds a new Bidder resource to the auction
-        access(contract) fun addNewBidder(_ bidder: @Bidder) {
-            self.bidders[bidder.address] <-! bidder
+        access(contract) fun addNewBidder(
+            address: Address,
+            bidVault: @FungibleToken.Vault,
+            vaultCap: Capability<&{FungibleToken.Receiver}>,
+            collectionCap: Capability<&{NonFungibleToken.CollectionPublic}>) {
+            
+            let bidder <- create Bidder(
+                address: address,
+                bidVault: <-bidVault,
+                vaultCap: vaultCap,
+                collectionCap: collectionCap
+            )
+
+            self.bidders[address] <-! bidder
         }
 
         // bidderExist returns false if there is no Bidder resource for the
@@ -291,6 +371,22 @@ pub contract OrbitalAuction {
             } else {
                 return true
             }
+        }
+
+        access(contract) fun distributeBidTokens(_ vault: @FungibleToken.Vault) {
+            let initialBalance = vault.balance
+            let epoch = self.borrowCurrentEpoch()
+            let weights = epoch.distribution.weights
+
+            for id in weights.keys {
+                let orb = self.borrowOrb(id)
+                let withdrawAmount = initialBalance * weights[id]!
+                let tokens <- vault.withdraw(amount: withdrawAmount)
+
+                orb.vault.deposit(from: <-tokens)
+            }
+
+            destroy vault
         }
         
         // getBidders returns a dictionary with the bidder's address and
@@ -328,6 +424,17 @@ pub contract OrbitalAuction {
             self.vault <- vault
         }
 
+        access(contract) fun assignOwner(bidder: @Bidder) {
+            pre {
+                self.bidder == nil: "Orb already has an owner"
+            }
+            self.bidder <-! bidder
+        }
+
+        pub fun logOwner() {
+            log(self.bidder?.address)
+        }
+
         destroy() {
             destroy self.bidder
             destroy self.prize
@@ -339,10 +446,92 @@ pub contract OrbitalAuction {
 
         pub let id: UInt64
         pub let endBlock: UInt64
+        pub var distribution: Distribution
 
         init(id: UInt64, endBlock: UInt64) {
             self.id = id
             self.endBlock = endBlock
+            self.distribution = Distribution(id)
+        }
+    }
+
+    pub struct Distribution {
+
+        pub(set) var weights: {UInt64: UFix64}
+        pub(set) var sumFactors: UInt64
+        pub(set) var sqrtVal: UInt64
+
+        init(_ session: UInt64) {
+            self.weights = {}
+            self.sumFactors = 0
+            self.sqrtVal = 0
+
+            self.updateFields(session)
+        }
+
+        pub fun updateFields(_ n: UInt64) {
+            self.sqrtVal = self.sqrt(n)
+            self.sumFactors = self.sumOfFactors(n)
+            self.weights = self.getWeights(n)
+        }
+
+        pub fun getWeights(_ n: UInt64): {UInt64: UFix64} {
+            var weights: {UInt64: UFix64} = {}
+            var i = UInt64(1)
+
+            while i < n + UInt64(1) {
+                if n % i == UInt64(0) {
+                    weights[i] = (UFix64(i) / UFix64(self.sumFactors))
+                }
+                i = i + UInt64(1)
+            }
+            return weights
+        }
+
+        pub fun sumOfFactors(_ n: UInt64): UInt64 {
+            if n == UInt64(1) {
+                return n
+            }
+
+            // sum of divisors
+            var res = UInt64(0)
+            var i = UInt64(2)
+
+            while i <= self.sqrtVal {
+
+                if n % i == UInt64(0) {
+                    if i == (n / i) {
+                        res = res + i
+                    } else {
+                        res = res + (i + n/i)
+                    }
+                }
+
+                i = i + UInt64(1)
+            }
+
+            res = res + n + UInt64(1)
+            return res
+        }
+
+        pub fun sqrt(_ n: UInt64): UInt64 {
+            if n == UInt64(0) {
+                return n
+            }
+
+            if n == UInt64(1) {
+                return n
+            }
+
+            var i = UInt64(1)
+            var res = UInt64(1)
+
+            while res <= n {
+                i = i + UInt64(1)
+                res = i * i
+            }
+
+            return i - UInt64(1)
         }
     }
 

@@ -52,7 +52,7 @@ transaction {
                             ?? panic("Signer is not the token admin!")
         
         // create a new minter and store it in account storage
-        let minter <-self.adminRef.createNewMinter(allowedAmount: UFix64(1000))
+        let minter <-self.adminRef.createNewMinter(allowedAmount: UFix64(100000))
         acct.save<@DemoToken.Minter>(<-minter, to: /storage/DemoTokenMinter)
 
         // create a capability for the new minter
@@ -68,10 +68,10 @@ transaction {
 
     execute {
         // mint tokens for both accounts
-        self.acct1Ref.deposit(from: <-self.minterRef.mintTokens(amount: UFix64(100)))
-        self.acct2Ref.deposit(from: <-self.minterRef.mintTokens(amount: UFix64(200)))
-        self.acct3Ref.deposit(from: <-self.minterRef.mintTokens(amount: UFix64(200)))
-        self.acct4Ref.deposit(from: <-self.minterRef.mintTokens(amount: UFix64(200)))
+        self.acct1Ref.deposit(from: <-self.minterRef.mintTokens(amount: UFix64(10000)))
+        self.acct2Ref.deposit(from: <-self.minterRef.mintTokens(amount: UFix64(20000)))
+        self.acct3Ref.deposit(from: <-self.minterRef.mintTokens(amount: UFix64(20000)))
+        self.acct4Ref.deposit(from: <-self.minterRef.mintTokens(amount: UFix64(20000)))
 
         log("Minted new DemoTokens for all accounts")
     }
