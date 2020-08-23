@@ -43,9 +43,7 @@ pub contract OrbitalAuction {
 
     pub resource interface AuctionAdmin {
         pub fun checkIsNextEpoch(_ auctionID: UInt64)
-        pub fun startNewEpoch(_ auctionID: UInt64)
-        // pub fun sendPayout(_ auctionID: UInt64, epoch: UInt64, address: Address, amount: UFix64)
-        // pub fun sendPrize(_ auctionID: UInt64, address: Address, epoch: UInt64)
+        pub fun startNextEpoch(_ auctionID: UInt64)
     }
 
     pub resource AuctionCollection: AuctionPublic, AuctionAdmin {
@@ -75,27 +73,18 @@ pub contract OrbitalAuction {
                 totalEpochs: totalEpochs,
                 epochLengthInBlocks: epochLengthInBlocks
             )
-
-            let Epoch = Epoch(
-                id: UInt64(1),
-                endBlock: getCurrentBlock().height + epochLengthInBlocks
-            )
-
-            let Orb <- create Orb(
-                id: UInt64(1),
-                vault: <-vault.withdraw(amount: UFix64(0))
-            )
             
             // Create Auction resource
             let Auction <- create Auction(
-                epoch: Epoch,
-                orb: <-Orb,
                 vault: <- vault,
                 meta: AuctionMeta
             )
             
             let oldToken <- self.auctions[auctionID] <- Auction
             destroy oldToken
+
+            self.createNewEpoch(auctionID, epochID: UInt64(1))
+            self.createNewOrb(auctionID)
 
             emit NewAuctionCreated(id: auctionID, totalSessions: totalEpochs)
         }
@@ -115,6 +104,9 @@ pub contract OrbitalAuction {
             bidTokens: @FungibleToken.Vault,
             address: Address
         ) {
+
+            self.checkIsNextEpoch(auctionID)
+
             // Get the auction reference
             let auctionRef = self.borrowAuction(auctionID)
 
@@ -151,8 +143,6 @@ pub contract OrbitalAuction {
                     collectionCap: collectionCap
                 )
             }
-
-            self.checkIsNextEpoch(auctionID)
         }
 
         pub fun getHighestBidder(_ auctionID: UInt64): @Bidder {
@@ -214,24 +204,29 @@ pub contract OrbitalAuction {
 
             } else {
 
-                self.startNewEpoch(auctionID)
+                self.startNextEpoch(auctionID)
                 self.createNewOrb(auctionID)
             }
         }
 
-        pub fun startNewEpoch(_ auctionID: UInt64) {
+        pub fun startNextEpoch(_ auctionID: UInt64) {
             let auctionRef = self.borrowAuction(auctionID)
             let currentEpoch = auctionRef.borrowCurrentEpoch()
 
             let newEpochID = currentEpoch.id + UInt64(1)
             
-            let NewEpoch = Epoch(
-                id: newEpochID,
-                endBlock: getCurrentBlock().height + auctionRef.meta.epochLength
-            )
-
+            self.createNewEpoch(auctionID, epochID: newEpochID)
             auctionRef.meta.currentEpoch = newEpochID
-            auctionRef.epochs[newEpochID] = NewEpoch
+        }
+
+        pub fun createNewEpoch(_ auctionID: UInt64, epochID: UInt64) {
+            let auctionRef = self.borrowAuction(auctionID)
+
+            let endBlock = getCurrentBlock().height + auctionRef.meta.epochLength
+
+            let newEpoch = Epoch(id: epochID, endBlock: endBlock)
+
+            auctionRef.epochs[newEpoch.id] = newEpoch
         }
 
         pub fun createNewOrb(_ auctionID: UInt64) {
@@ -325,9 +320,9 @@ pub contract OrbitalAuction {
         access(contract) var bidders: @{Address: Bidder}
         access(contract) var meta: Meta
 
-        init(epoch: Epoch, orb: @Orb, vault: @FungibleToken.Vault, meta: Meta) {
-            self.epochs = {UInt64(1): epoch}
-            self.orbs <- {UInt64(1): <-orb}
+        init(vault: @FungibleToken.Vault, meta: Meta) {
+            self.epochs = {}
+            self.orbs <- {}
             self.masterVault <- vault
             self.bidders <- {}
             self.meta = meta
