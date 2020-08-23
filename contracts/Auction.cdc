@@ -24,8 +24,8 @@ pub contract OrbitalAuction {
     pub event updatedBid(auctionID: UInt64, address: Address, bidTotal: UFix64)
     // pub event AuctionSettled(tokenID: UInt64, price: UFix64)
 
-    // AuctionPublic is a resource interface that restricts users to...
-    //
+    // AuctionPublic is a resource interface that restricts users to
+    // placing bids and reading data from an Auction instance
     pub resource interface AuctionPublic {
         pub fun placeBid(
             auctionID: UInt64,
@@ -41,11 +41,20 @@ pub contract OrbitalAuction {
         pub fun logAllOrbInfo(auctionID: UInt64)
     }
 
+    // AuctionAdmin is a resource interface that provides users
+    // with access to restricted Auction methods that may impact
+    // the outcome of the auction
+    //
+    // AuctionAdmin can be used to manage the Auction from an external 
+    // script
+    //
     pub resource interface AuctionAdmin {
         pub fun checkIsNextEpoch(_ auctionID: UInt64)
         pub fun startNextEpoch(_ auctionID: UInt64)
     }
 
+    // AuctionCollection contains all orbital auctions for an account and provides
+    // methods for manipulating and reading data from the auction
     pub resource AuctionCollection: AuctionPublic, AuctionAdmin {
         // The total amount of Auctions in the AuctionCollection
         access(contract) var totalAuctions: UInt64
@@ -63,7 +72,8 @@ pub contract OrbitalAuction {
         pub fun createNewAuction(
             totalEpochs: UInt64,
             epochLengthInBlocks: UInt64,
-            vault: @FungibleToken.Vault
+            vault: @FungibleToken.Vault,
+            prizes: @NonFungibleToken.Collection
         ) {
             let auctionID = self.totalAuctions + UInt64(1)
             
@@ -83,6 +93,7 @@ pub contract OrbitalAuction {
             let oldToken <- self.auctions[auctionID] <- Auction
             destroy oldToken
 
+            self.addPrizeCollectionToAuction(auctionID, collection: <-prizes)
             self.createNewEpoch(auctionID, epochID: UInt64(1))
             self.createNewOrb(auctionID)
 
@@ -240,6 +251,40 @@ pub contract OrbitalAuction {
 
             let oldOrb <- auctionRef.orbs[currentEpoch] <- newOrb
             destroy oldOrb
+
+            self.addPrizeToOrb(auctionID, orbID: currentEpoch)
+        }
+
+        pub fun addPrizeToAuction(_ auctionID: UInt64, prize: @NonFungibleToken.NFT) {
+            let auctionRef = self.borrowAuction(auctionID)
+            let prizeID = UInt64(auctionRef.prizes.length + 1)
+
+            auctionRef.prizes[prizeID] <-! prize
+        }
+
+        pub fun addPrizeCollectionToAuction(_ auctionID: UInt64, collection: @NonFungibleToken.Collection) {
+
+            for tokenID in collection.getIDs() {
+                let token <- collection.withdraw(withdrawID: tokenID)
+                self.addPrizeToAuction(auctionID, prize: <-token)
+            }
+
+            destroy collection
+        }
+
+        pub fun addPrizeToOrb(_ auctionID: UInt64, orbID: UInt64) {
+            let auctionRef = self.borrowAuction(auctionID)
+            let orbRef = &auctionRef.orbs[orbID] as &Orb
+
+            if orbRef == nil {
+                panic("Orb doesn't exist yet")
+            }
+
+            if let prize <- auctionRef.prizes[orbID] <- nil {
+                orbRef.assignPrize(prize: <-prize)
+            } else {
+                log("no prize available for this epoch")
+            }
         }
 
         // getAuctionInfo returns an array of Auction references that belong to
@@ -289,6 +334,12 @@ pub contract OrbitalAuction {
             log("***")
             log("Orb Balance")
             log(orb.vault.balance)
+            if orb.hasPrize() {
+                log("Orb Prize")
+                log(orb)
+            } else {
+                log("Orb has no prize yet")
+            }
         }
 
         pub fun logAllOrbInfo(auctionID: UInt64) {
@@ -318,6 +369,7 @@ pub contract OrbitalAuction {
         access(contract) var orbs: @{UInt64: Orb}
         access(contract) let masterVault: @FungibleToken.Vault
         access(contract) var bidders: @{Address: Bidder}
+        access(contract) var prizes: @{UInt64: NonFungibleToken.NFT}
         access(contract) var meta: Meta
 
         init(vault: @FungibleToken.Vault, meta: Meta) {
@@ -325,6 +377,7 @@ pub contract OrbitalAuction {
             self.orbs <- {}
             self.masterVault <- vault
             self.bidders <- {}
+            self.prizes <- {}
             self.meta = meta
         }
 
@@ -405,6 +458,8 @@ pub contract OrbitalAuction {
         }
     }
 
+    // Orb contains the prizes from the auction as well as the Bidder
+    // that eventually owns it
     pub resource Orb {
         pub let id: UInt64
         pub var bidder: @Bidder?
@@ -425,6 +480,21 @@ pub contract OrbitalAuction {
             self.bidder <-! bidder
         }
 
+        access(contract) fun assignPrize(prize: @NonFungibleToken.NFT) {
+            pre {
+                self.prize == nil: "Orb already has a prize"
+            }
+            self.prize <-! prize
+        }
+
+        access(contract) fun hasPrize(): Bool {
+            if self.prize == nil {
+                return false
+            } else {
+                return true
+            }
+        }
+
         pub fun logOwner() {
             log(self.bidder?.address)
         }
@@ -436,6 +506,8 @@ pub contract OrbitalAuction {
         }
     }
 
+    // Bidder contains a Vault and the capabilities used to send
+    // prizes to the Bidder
     pub resource Bidder {
 
         // Address
@@ -490,6 +562,8 @@ pub contract OrbitalAuction {
         }
     }
 
+    // Epoch represents a single cycle in the auction and contains the
+    // weights used to distribute the tokens at the end of the cycle
     pub struct Epoch {
 
         pub let id: UInt64
@@ -503,6 +577,8 @@ pub contract OrbitalAuction {
         }
     }
 
+    // Distribution calculates the weights used to distribute the tokens
+    // at the end of an Epoch cycle
     pub struct Distribution {
 
         pub(set) var weights: {UInt64: UFix64}
