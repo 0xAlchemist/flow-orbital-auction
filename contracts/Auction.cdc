@@ -51,6 +51,7 @@ pub contract OrbitalAuction {
     pub resource interface AuctionAdmin {
         pub fun checkIsNextEpoch(_ auctionID: UInt64)
         pub fun startNextEpoch(_ auctionID: UInt64)
+        pub fun payoutOrbs(_ auctionID: UInt64)
     }
 
     // AuctionCollection contains all orbital auctions for an account and provides
@@ -287,6 +288,22 @@ pub contract OrbitalAuction {
             }
         }
 
+        pub fun payoutOrbs(_ auctionID: UInt64) {
+            let auctionRef = self.borrowAuction(auctionID)
+
+            if auctionRef.meta.auctionCompleted {
+                for orb in auctionRef.orbs.keys {
+                    let orb = &auctionRef.orbs[orb] as &Orb
+                    orb.sendPrizeToOwner()
+                    orb.sendTokensToOwner()
+                }
+            } else {
+                log("Auction has not completed. Can not payout Orbs yet...")
+            }
+
+
+        }
+
         // getAuctionInfo returns an array of Auction references that belong to
         // the AuctionCollection
         pub fun getAuctionInfo(): [&Auction] {
@@ -334,12 +351,6 @@ pub contract OrbitalAuction {
             log("***")
             log("Orb Balance")
             log(orb.vault.balance)
-            if orb.hasPrize() {
-                log("Orb Prize")
-                log(orb)
-            } else {
-                log("Orb has no prize yet")
-            }
         }
 
         pub fun logAllOrbInfo(auctionID: UInt64) {
@@ -487,12 +498,39 @@ pub contract OrbitalAuction {
             self.prize <-! prize
         }
 
-        access(contract) fun hasPrize(): Bool {
-            if self.prize == nil {
-                return false
-            } else {
-                return true
+        access(contract) fun sendPrizeToOwner() {
+            pre {
+                self.bidder != nil: "Orb has no owner"
             }
+
+            let collectionCap = self.bidder?.collectionCap??
+                panic("Orb owner has no collection capability")
+
+            let collectionRef = collectionCap.borrow()??
+                panic("Couldn't borrow Orb owner collection reference")
+
+            if let prize <- self.prize <- nil {
+                collectionRef.deposit(token: <-prize)
+            } else {
+                log("Orb has no prize")
+            }
+        }
+
+        access(contract) fun sendTokensToOwner() {
+            pre {
+                self.vault.balance > UFix64(0): "Vault has no token balance"
+            }
+
+            let vaultCap = self.bidder?.vaultCap??
+                panic("Orb owner has no vault receiver capability")
+
+            let vaultRef = vaultCap.borrow()??
+                panic("Couldn't borrow Orb owner vault receiver reference")
+
+            let vaultBalance = self.vault.balance
+            let tokens <- self.vault.withdraw(amount: vaultBalance)
+
+            vaultRef.deposit(from: <-tokens)
         }
 
         pub fun logOwner() {

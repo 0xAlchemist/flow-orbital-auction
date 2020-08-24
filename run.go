@@ -54,7 +54,7 @@ func main() {
 
 	flow.RunScript("check_auctions")
 
-	for i := 0; i < 119; i++ {
+	for i := 0; i < 60; i++ {
 		flow.SendTransaction("bid/place_bid", rocks)
 		flow.SendTransaction("bid/place_bid", nonFungibleToken)
 		flow.SendTransaction("bid/place_bid", rocks)
@@ -72,6 +72,18 @@ func main() {
 	flow.RunScript("check_bidders")
 
 	flow.RunScript("check_epoch")
+
+	flow.RunScript("check_orbs")
+
+	flow.RunScript("check_account")
+
+	wait()
+
+	flow.SendTransaction("payout/payout_orbs", demoToken)
+
+	flow.RunScript("check_account")
+
+	wait()
 
 	flow.RunScript("check_orbs")
 }
