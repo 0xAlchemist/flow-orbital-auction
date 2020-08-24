@@ -18,11 +18,16 @@ import NonFungibleToken from 0x01cf0e2f2f715450
 pub contract OrbitalAuction {
 
     // Events
-    pub event NewCollectionCreated(block: UInt64)
     pub event NewAuctionCreated(id: UInt64, totalSessions: UInt64)
     pub event NewBid(auctionID: UInt64, address: Address, bidTotal: UFix64)
-    pub event updatedBid(auctionID: UInt64, address: Address, bidTotal: UFix64)
-    // pub event AuctionSettled(tokenID: UInt64, price: UFix64)
+    pub event UpdatedBid(auctionID: UInt64, address: Address, bidIncrease: UFix64, bidTotal: UFix64)
+    pub event NewEpochStarted(auctionID: UInt64, epochID: UInt64, epochEndBlock: UInt64)
+    pub event NewPrizeAddedToOrb(auctionID: UInt64, orbID: UInt64, tokenID: UInt64)
+    pub event OrbOwnerAssigned(auctionID: UInt64, orbID: UInt64, owner: Address)
+    pub event OrbRewardsPaid(auctionID: UInt64, orbID: UInt64, amount: UFix64)
+    pub event OrbTokensRedeemed(auctionID: UInt64, orbID: UInt64, address: Address, amount: UFix64)
+    pub event OrbPrizeRedeemed(auctionID: UInt64, orbID: UInt64, address: Address, tokenID: UInt64)
+    pub event AuctionCompleted(auctionID: UInt64)
 
     // AuctionPublic is a resource interface that restricts users to
     // placing bids and reading data from an Auction instance
@@ -122,6 +127,8 @@ pub contract OrbitalAuction {
             // Get the auction reference
             let auctionRef = self.borrowAuction(auctionID)
 
+            let bidAmount = bidTokens.balance
+
             // If the bidder has already bid...
             if auctionRef.bidderExists(address) {
 
@@ -145,6 +152,8 @@ pub contract OrbitalAuction {
 
                 }
 
+                emit UpdatedBid(auctionID: auctionRef.meta.auctionID, address: address, bidIncrease: bidAmount, bidTotal: bidderRef.bidVault.balance)
+
             // ... otherwise...
             } else {
                 // ... create a new Bidder resource
@@ -154,6 +163,8 @@ pub contract OrbitalAuction {
                     vaultCap: vaultCap,
                     collectionCap: collectionCap
                 )
+
+                emit NewBid(auctionID: auctionRef.meta.auctionID, address: address, bidTotal: bidAmount)
             }
         }
 
@@ -208,11 +219,15 @@ pub contract OrbitalAuction {
 
             orb.assignOwner(bidder: <-highestBidder)
 
+            emit OrbOwnerAssigned(auctionID: auctionID, orbID: orb.id, owner: orb.bidder?.address!)
+
             self.logCurrentEpochInfo(auctionID)
 
             if auctionRef.meta.currentEpoch >= auctionRef.meta.totalEpochs {
 
                 auctionRef.meta.auctionCompleted = true
+
+                emit AuctionCompleted(auctionID: auctionID)
 
             } else {
 
@@ -229,6 +244,10 @@ pub contract OrbitalAuction {
             
             self.createNewEpoch(auctionID, epochID: newEpochID)
             auctionRef.meta.currentEpoch = newEpochID
+
+            let newEpoch = auctionRef.borrowCurrentEpoch()
+
+            emit NewEpochStarted(auctionID: auctionID, epochID: newEpochID, epochEndBlock: newEpoch.endBlock)
         }
 
         pub fun createNewEpoch(_ auctionID: UInt64, epochID: UInt64) {
@@ -246,6 +265,7 @@ pub contract OrbitalAuction {
             let currentEpoch = auctionRef.meta.currentEpoch
 
             let newOrb <- create Orb(
+                auctionID,
                 id: currentEpoch,
                 vault: <-auctionRef.masterVault.withdraw(amount: UFix64(0))
             )
@@ -284,7 +304,7 @@ pub contract OrbitalAuction {
             if let prize <- auctionRef.prizes[orbID] <- nil {
                 orbRef.assignPrize(prize: <-prize)
             } else {
-                log("no prize available for this epoch")
+                log("No prize available for this epoch")
             }
         }
 
@@ -442,6 +462,8 @@ pub contract OrbitalAuction {
                 let tokens <- vault.withdraw(amount: withdrawAmount)
 
                 orb.vault.deposit(from: <-tokens)
+                
+                emit OrbRewardsPaid(auctionID: self.meta.auctionID, orbID: orb.id, amount: withdrawAmount)
             }
 
             destroy vault
@@ -472,12 +494,14 @@ pub contract OrbitalAuction {
     // Orb contains the prizes from the auction as well as the Bidder
     // that eventually owns it
     pub resource Orb {
+        pub let auctionID: UInt64
         pub let id: UInt64
         pub var bidder: @Bidder?
         pub var prize: @NonFungibleToken.NFT?
         pub var vault: @FungibleToken.Vault
 
-        init(id: UInt64, vault: @FungibleToken.Vault) {
+        init(_ auctionID: UInt64, id: UInt64, vault: @FungibleToken.Vault) {
+            self.auctionID = auctionID
             self.id = id
             self.bidder <- nil
             self.prize <- nil
@@ -496,6 +520,8 @@ pub contract OrbitalAuction {
                 self.prize == nil: "Orb already has a prize"
             }
             self.prize <-! prize
+
+            emit NewPrizeAddedToOrb(auctionID: self.auctionID, orbID: self.id, tokenID: self.prize?.id!)
         }
 
         access(contract) fun sendPrizeToOwner() {
@@ -510,7 +536,10 @@ pub contract OrbitalAuction {
                 panic("Couldn't borrow Orb owner collection reference")
 
             if let prize <- self.prize <- nil {
+                let tokenID = prize.id
                 collectionRef.deposit(token: <-prize)
+
+                emit OrbPrizeRedeemed(auctionID: self.auctionID, orbID: self.id, address: self.bidder?.address!, tokenID: tokenID)
             } else {
                 log("Orb has no prize")
             }
@@ -531,6 +560,8 @@ pub contract OrbitalAuction {
             let tokens <- self.vault.withdraw(amount: vaultBalance)
 
             vaultRef.deposit(from: <-tokens)
+
+            emit OrbTokensRedeemed(auctionID: self.auctionID, orbID: self.id, address: self.bidder?.address!, amount: vaultBalance)
         }
 
         pub fun logOwner() {
@@ -700,8 +731,6 @@ pub contract OrbitalAuction {
     // createAuctionCollection returns a new AuctionCollection resource to the caller
     pub fun createAuctionCollection(): @AuctionCollection {
         let AuctionCollection <- create AuctionCollection()
-
-        emit NewCollectionCreated(block: getCurrentBlock().height)
 
         return <- AuctionCollection
     }
