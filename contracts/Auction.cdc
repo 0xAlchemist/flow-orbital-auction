@@ -24,7 +24,7 @@ pub contract OrbitalAuction {
     pub event NewEpochStarted(auctionID: UInt64, epochID: UInt64, epochEndBlock: UInt64)
     pub event NewPrizeAddedToOrb(auctionID: UInt64, orbID: UInt64, tokenID: UInt64)
     pub event OrbOwnerAssigned(auctionID: UInt64, orbID: UInt64, owner: Address)
-    pub event OrbRewardsPaid(auctionID: UInt64, orbID: UInt64, amount: UFix64)
+    pub event OrbBalanceIncreased(auctionID: UInt64, orbID: UInt64, amount: UFix64)
     pub event OrbTokensRedeemed(auctionID: UInt64, orbID: UInt64, address: Address, amount: UFix64)
     pub event OrbPrizeRedeemed(auctionID: UInt64, orbID: UInt64, address: Address, tokenID: UInt64)
     pub event UnusedBidsReturned(address: Address, amount: UFix64)
@@ -465,7 +465,7 @@ pub contract OrbitalAuction {
 
                 orb.vault.deposit(from: <-tokens)
                 
-                emit OrbRewardsPaid(auctionID: self.meta.auctionID, orbID: orb.id, amount: withdrawAmount)
+                emit OrbBalanceIncreased(auctionID: self.meta.auctionID, orbID: orb.id, amount: withdrawAmount)
             }
 
             destroy vault
