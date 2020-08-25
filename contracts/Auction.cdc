@@ -27,6 +27,7 @@ pub contract OrbitalAuction {
     pub event OrbRewardsPaid(auctionID: UInt64, orbID: UInt64, amount: UFix64)
     pub event OrbTokensRedeemed(auctionID: UInt64, orbID: UInt64, address: Address, amount: UFix64)
     pub event OrbPrizeRedeemed(auctionID: UInt64, orbID: UInt64, address: Address, tokenID: UInt64)
+    pub event UnusedBidsReturned(address: Address, amount: UFix64)
     pub event AuctionCompleted(auctionID: UInt64)
 
     // AuctionPublic is a resource interface that restricts users to
@@ -127,6 +128,8 @@ pub contract OrbitalAuction {
             // Get the auction reference
             let auctionRef = self.borrowAuction(auctionID)
 
+            if auctionRef.meta.auctionCompleted { panic("auction has already completed") }
+
             let bidAmount = bidTokens.balance
 
             // If the bidder has already bid...
@@ -205,10 +208,7 @@ pub contract OrbitalAuction {
         pub fun handleEndOfEpoch(_ auctionID: UInt64) {
             let auctionRef = self.borrowAuction(auctionID)
 
-            log("handleEndOfEpoch")
-            log(auctionRef.getBidders())
-
-            // TODO: Handle case if there are no bids?
+            // TODO: Handle case if there are no bids
             let orb = auctionRef.borrowOrb(auctionRef.meta.currentEpoch)
             let highestBidder <- self.getHighestBidder(auctionID)
             let bidAmount = highestBidder.bidVault.balance
@@ -226,6 +226,8 @@ pub contract OrbitalAuction {
             if auctionRef.meta.currentEpoch >= auctionRef.meta.totalEpochs {
 
                 auctionRef.meta.auctionCompleted = true
+
+                auctionRef.clearBidders()
 
                 emit AuctionCompleted(auctionID: auctionID)
 
@@ -468,6 +470,13 @@ pub contract OrbitalAuction {
 
             destroy vault
         }
+
+        access(contract) fun clearBidders() {
+            for address in self.bidders.keys {
+                let bidder <- self.bidders[address] <- nil
+                destroy bidder
+            }
+        }
         
         // getBidders returns a dictionary with the bidder's address and
         // bidTotal
@@ -488,6 +497,9 @@ pub contract OrbitalAuction {
             // TODO: Safely destroy the auction resources by sending
             // FTs and NFTs back to their owners
             destroy self.orbs
+            destroy self.bidders
+            destroy self.masterVault
+            destroy self.prizes
         }
     }
 
@@ -569,6 +581,9 @@ pub contract OrbitalAuction {
         }
 
         destroy() {
+            self.sendPrizeToOwner()
+            self.sendTokensToOwner()
+            
             destroy self.bidder
             destroy self.prize
             destroy self.vault
@@ -601,7 +616,18 @@ pub contract OrbitalAuction {
             self.collectionCap = collectionCap
         }
 
+        access(self) fun returnBidderTokens() {
+            let vaultBalance = self.bidVault.balance
+            let vaultReceiver = self.vaultCap.borrow()
+            let vaultTokens <- self.bidVault.withdraw(amount: vaultBalance)
+
+            vaultReceiver!.deposit(from: <-vaultTokens)
+
+            emit UnusedBidsReturned(address: self.address, amount: vaultBalance)
+        }
+
         destroy() {
+            self.returnBidderTokens()
             destroy self.bidVault
         }
     }
