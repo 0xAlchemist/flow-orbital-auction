@@ -115,7 +115,6 @@ pub contract OrbitalAuction {
             // the highest bidder at the end of the Epoch
             self.createNewOrb(auctionID)
 
-            // Announce the new auction to the blockchain. Let the people know!
             emit NewAuctionCreated(id: auctionID, totalSessions: totalEpochs)
         }
 
@@ -173,11 +172,11 @@ pub contract OrbitalAuction {
                     bidderRef.bidVault.deposit(from: <-bidTokens)
                 }
 
-                // ...emit the UpdateBid event for a returning Bidder
                 emit UpdatedBid(auctionID: auctionRef.meta.auctionID, address: address, bidIncrease: bidAmount, bidTotal: bidderRef.bidVault.balance)
 
             // ... if this is a new Bidder...
             } else {
+
                 // ... create a new Bidder resource
                 auctionRef.addNewBidder(
                     address: address,
@@ -186,7 +185,6 @@ pub contract OrbitalAuction {
                     collectionCap: collectionCap
                 )
 
-                // ...emit the NewBid event for a new Bidder
                 emit NewBid(auctionID: auctionRef.meta.auctionID, address: address, bidTotal: bidAmount)
             }
         }
@@ -235,18 +233,23 @@ pub contract OrbitalAuction {
         // currentBlock height is greater than the endBlock number
         // of the current Epoch
         pub fun checkIsNextEpoch(_ auctionID: UInt64) {
+            
             // Get the auction reference
             let auctionRef = self.borrowAuction(auctionID)
+            
             // Get the current Epoch
             let epoch = auctionRef.borrowCurrentEpoch()
+            
             // Get the current block height
             let currentBlock = getCurrentBlock().height
 
             // If the current block height is greater than or equal to
             // the endBlock for the current Epoch...
             if currentBlock >= epoch.endBlock {
+                
                 // ... if the auction has not completed...
                 if !auctionRef.meta.auctionCompleted {
+                    
                     // ... handle the end of the current Epoch
                     self.handleEndOfEpoch(auctionID)
                 }
@@ -286,7 +289,6 @@ pub contract OrbitalAuction {
             // Assign the highest bidder to the orb for the current Epoch
             orb.assignOwner(bidder: <-highestBidder)
 
-            // Emit the OrbOwnerAssigned event
             emit OrbOwnerAssigned(auctionID: auctionID, orbID: orb.id, owner: orb.bidder?.address!)
 
             // If this is the final Epoch...
@@ -294,9 +296,10 @@ pub contract OrbitalAuction {
 
                 // ...the Auction has completed
                 auctionRef.meta.auctionCompleted = true
+                
                 // ...clear the remaining Bidders, returning their unused bids
                 auctionRef.clearBidders()
-                // ...emit the AuctionCompleted event
+                
                 emit AuctionCompleted(auctionID: auctionID)
 
             // ...if this is not the final Epoch
@@ -304,6 +307,7 @@ pub contract OrbitalAuction {
                 
                 // ...start a new Epoch
                 self.startNextEpoch(auctionID)
+
                 // ...create a new Orb
                 self.createNewOrb(auctionID)
             }
@@ -331,7 +335,6 @@ pub contract OrbitalAuction {
             // Get the newEpoch data
             let newEpoch = auctionRef.borrowCurrentEpoch()
 
-            // Emit the NewEpochStarted event
             emit NewEpochStarted(auctionID: auctionID, epochID: newEpochID, epochEndBlock: newEpoch.endBlock)
         }
 
@@ -427,14 +430,17 @@ pub contract OrbitalAuction {
 
             // If the Orb doesn't exist...
             if orbRef == nil {
+
                 // ...panic and revert the transaction
                 panic("Orb doesn't exist yet")
             }
 
             // If there is a Prize available for this Orb...
             if let prize <- auctionRef.prizes[orbID] <- nil {
+
                 // ...Assign the prize to the Orb
                 orbRef.assignPrize(prize: <-prize)
+
             // ...If there is no prize available...
             } else {
                 // ...let the user know they haven't added a prize yet
@@ -496,6 +502,7 @@ pub contract OrbitalAuction {
             return auctionInfo
         }
 
+        // TODO: Log methods are still being updated for the demo
         // logCurrentEpochInfo logs the state of the current Epoch
         pub fun logCurrentEpochInfo(_ auctionID: UInt64) {
             let auctionRef = self.borrowAuction(auctionID)
@@ -652,7 +659,6 @@ pub contract OrbitalAuction {
                 // ...deposit the tokens in the Orb's Vault
                 orb.vault.deposit(from: <-tokens)
                 
-                // ...emit the OrbBalanceIncreased event
                 emit OrbBalanceIncreased(auctionID: self.meta.auctionID, orbID: orb.id, amount: withdrawAmount)
             }
 
@@ -742,7 +748,6 @@ pub contract OrbitalAuction {
             }
             self.prize <-! prize
 
-            // emit the NewPrizeAddedToOrb event
             emit NewPrizeAddedToOrb(auctionID: self.auctionID, orbID: self.id, tokenID: self.prize?.id!)
         }
 
@@ -770,7 +775,6 @@ pub contract OrbitalAuction {
                 // ...deposit the Prize into the Orb owner's NonFungibleToken Collection
                 collectionRef.deposit(token: <-prize)
 
-                // ...emit the OrbPrizeRedeemed event
                 emit OrbPrizeRedeemed(auctionID: self.auctionID, orbID: self.id, address: self.bidder?.address!, tokenID: tokenID)
             
             // ...if the Orb has no Prize
@@ -805,7 +809,6 @@ pub contract OrbitalAuction {
             // Deposit the FungibleTokens into the Orb owner's FungibleToken Vault
             vaultRef.deposit(from: <-tokens)
 
-            // Emit the OrbTokensRedeemed event
             emit OrbTokensRedeemed(auctionID: self.auctionID, orbID: self.id, address: self.bidder?.address!, amount: vaultBalance)
         }
 
