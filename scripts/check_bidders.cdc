@@ -9,9 +9,9 @@ import OrbitalAuction from 0xe03daebed8ca0615
 // Acct 3 - 0xf3fcd2c1a78f5eee - rocks.cdc
 // Acct 4 - 0xe03daebed8ca0615 - auction.cdc
 
-pub fun main() {
+pub fun main(auctionOwner: Address, auctionID: UInt64) {
     // get the accounts' public address objects
-    let account = getAccount(0x179b6b1cb6755e31)
+    let account = getAccount(auctionOwner)
 
     // get the reference to the account's receivers
     // by getting their public capability
@@ -20,7 +20,7 @@ pub fun main() {
 
     if let auctionRef = auctionCap.borrow<&{OrbitalAuction.AuctionPublic}>() {
         log("Current Bidders")
-        log(auctionRef.getAuctionBidders(UInt64(1)))
+        log(auctionRef.getAuctionBidders(auctionID))
     } else {
         log("unable to borrow orbital auction reference")
     }

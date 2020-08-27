@@ -10,9 +10,9 @@ import OrbitalAuction from 0xe03daebed8ca0615
 // Acct 3 - 0xf3fcd2c1a78f5eee - rocks.cdc
 // Acct 4 - 0xe03daebed8ca0615 - auction.cdc
 
-pub fun main() {
+pub fun main(account: Address) {
     // get the accounts' public address objects
-    let account = getAccount(0x179b6b1cb6755e31)
+    let account = getAccount(account)
 
     // get the reference to the account's receivers
     // by getting their public capability
