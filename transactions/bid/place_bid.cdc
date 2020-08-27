@@ -13,7 +13,7 @@ import OrbitalAuction from 0xe03daebed8ca0615
 // Acct 3 - 0xf3fcd2c1a78f5eee - Rocks.cdc
 // Acct 4 - 0xe03daebed8ca0615 - Auction.cdc
 
-transaction {
+transaction(auctionOwner: Address, auctionID: UInt64, bidAmount: UFix64) {
     let collectionCap: Capability<&{NonFungibleToken.CollectionPublic}>
     let publicVaultCap: Capability<&{FungibleToken.Receiver}>
     let bidTokens: @FungibleToken.Vault
@@ -36,14 +36,14 @@ transaction {
 
         let adminVaultRef = account.borrow<&FungibleToken.Vault>(from: /storage/DemoTokenVault)!
 
-        self.bidTokens <- adminVaultRef.withdraw(amount: UFix64(20))
+        self.bidTokens <- adminVaultRef.withdraw(amount: bidAmount)
 
         self.bidderAddress = account.address
     }
 
     execute {
         // get the public account object where the auction capability is stored
-        let seller = getAccount(0x179b6b1cb6755e31)
+        let seller = getAccount(auctionOwner)
 
         // get the public reference to the AuctionCollection
         let auctionCap = seller.getCapability(/public/OrbitalAuction)!
@@ -55,7 +55,7 @@ transaction {
         let auctionRef = auctionCap.borrow<&{OrbitalAuction.AuctionPublic}>()!
 
         auctionRef.placeBid(
-            auctionID: UInt64(1),
+            auctionID: auctionID,
             vaultCap: self.publicVaultCap,
             collectionCap: self.collectionCap,
             bidTokens: <-self.bidTokens,

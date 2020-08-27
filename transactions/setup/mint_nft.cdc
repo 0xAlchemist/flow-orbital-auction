@@ -15,21 +15,21 @@ import Rocks from 0xf3fcd2c1a78f5eee
 // Acct 3 - 0xf3fcd2c1a78f5eee - rocks.cdc
 // Acct 4 - 0xe03daebed8ca0615 - auction.cdc
 
-transaction{
+transaction(receiver: Address){
 
     // private reference to this account's minter resource
     let minterRef: &Rocks.NFTMinter
     
-    prepare(acct: AuthAccount) {
+    prepare(signer: AuthAccount) {
         // borrow a reference to the NFTMinter in storage
-        self.minterRef = acct.borrow<&Rocks.NFTMinter>(from: /storage/RockMinter)
+        self.minterRef = signer.borrow<&Rocks.NFTMinter>(from: /storage/RockMinter)
             ?? panic("Could not borrow owner's vault minter reference")
         
     }
 
     execute {
         // Get the recipient's public account object
-        let recipient = getAccount(0x179b6b1cb6755e31)
+        let recipient = getAccount(receiver)
 
         // get the collection reference for the receiver
         // getting the public capability and borrowing the reference from it

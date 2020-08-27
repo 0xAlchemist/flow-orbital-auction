@@ -12,13 +12,13 @@ import OrbitalAuction from 0xe03daebed8ca0615
 // Acct 3 - 0xf3fcd2c1a78f5eee - Rocks.cdc
 // Acct 4 - 0xe03daebed8ca0615 - Auction.cdc
 
-transaction {
+transaction(epochCount: UInt64, epochLengthInBlocks: UInt64) {
 
-    prepare(account: AuthAccount) {
+    prepare(signer: AuthAccount) {
 
-        let orbitalRef = account.borrow<&OrbitalAuction.AuctionCollection>(from: /storage/OrbitalAuction)!
+        let orbitalRef = signer.borrow<&OrbitalAuction.AuctionCollection>(from: /storage/OrbitalAuction)!
         
-        let collectionRef = account.borrow<&NonFungibleToken.Collection>(from: /storage/RockCollection)!
+        let collectionRef = signer.borrow<&NonFungibleToken.Collection>(from: /storage/RockCollection)!
 
         let tokenIDs = collectionRef.getIDs()
 
@@ -31,10 +31,10 @@ transaction {
 
         let vault <- DemoToken.createEmptyVault()
 
-        // store the sale resource in the account for storage
+        // create a new auction in the auction collection
         orbitalRef.createNewAuction(
-            totalEpochs: UInt64(15),
-            epochLengthInBlocks: UInt64(12),
+            totalEpochs: epochCount,
+            epochLengthInBlocks: epochLengthInBlocks,
             vault: <-vault,
             prizes: <-tempCollection
         )
