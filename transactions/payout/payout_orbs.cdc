@@ -1,4 +1,10 @@
-// This transaction pays out tokens to the hardcoded account
+// payout/payout_orbs.cdc
+// *************************
+// This transaction must be run by the Auction Admin.
+//
+// This transaction takes an auctionID UInt64 and pays
+// out the prizes and tokens owned by each Orb to it's
+// owner if the Auction has completed.
 
 import OrbitalAuction from 0xe03daebed8ca0615
 
@@ -10,14 +16,17 @@ import OrbitalAuction from 0xe03daebed8ca0615
 
 transaction(auctionID: UInt64) {
 
-    let auctionRef: &{OrbitalAuction.AuctionAdmin}
+    let auctionAdminRef: &{OrbitalAuction.AuctionAdmin}
 
     prepare(account: AuthAccount) {
 
-        self.auctionRef = account.borrow<&{OrbitalAuction.AuctionAdmin}>(from: /storage/OrbitalAuction)!
+        // Borrow a reference to the AuctionAdmin interface in the signer's account storage
+        self.auctionAdminRef = account.borrow<&{OrbitalAuction.AuctionAdmin}>(from: /storage/OrbitalAuction)!
     }
 
     execute {
-        self.auctionRef.payoutOrbs(auctionID)
+
+        // Pay out the Orbs for the Auction
+        self.auctionAdminRef.payoutOrbs(auctionID)
     }
 }
