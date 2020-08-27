@@ -1,5 +1,12 @@
-// This transaction creates an new Auction for the signer
-// 
+// list/create_auction.cdc
+// *************************
+// This transaction takes an epochCount UInt64 and an
+// epochLengthInBlocks UInt64 and creates a new Auction
+// for the signer using a DemoToken Vault and Rock Collection
+// for bid currency and prizes
+//
+// The signer must already have a Rock Collection and Orbital
+// Auction Collection in storage
 
 import DemoToken from 0x179b6b1cb6755e31
 import NonFungibleToken from 0x01cf0e2f2f715450

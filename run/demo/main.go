@@ -115,7 +115,7 @@ func main() {
 	println("Epochs - 8")
 	println("Epoch Length - 12 blocks")
 
-	flow.SendTransactionWithArguments("list/create_auction", auction,
+	flow.SendTransactionWithArguments("create_auction/create_auction", auction,
 		cadence.UInt64(8),  // Epoch Count
 		cadence.UInt64(12)) // Epoch Length in Blocks
 
