@@ -1,3 +1,5 @@
+// setup/create_auction_collection.cdc
+// *************************
 // This transaction creates an empty Auction Collection for the signer
 // and publishes a capability to the collection in storage
 
@@ -11,17 +13,17 @@ import OrbitalAuction from 0xe03daebed8ca0615
 
 transaction {
 
-    prepare(account: AuthAccount) {
-        // create a new sale object     
-        // initializing it with the reference to the owner's Vault
+    prepare(signer: AuthAccount) {
+
+        // create a new OrbitalAuction AuctionCollection resource
         let auction <- OrbitalAuction.createAuctionCollection()
 
-        // store the sale resource in the account for storage
-        account.save(<-auction, to: /storage/OrbitalAuction)
+        // store the AuctionCollection resource in the account for storage
+        signer.save(<-auction, to: /storage/OrbitalAuction)
 
-        // create a public capability to the sale so that others
-        // can call it's methods
-        account.link<&{OrbitalAuction.AuctionPublic}>(
+        // create a public capability to the AuctionCollection so that others
+        // can call it's public methods
+        signer.link<&{OrbitalAuction.AuctionPublic}>(
             /public/OrbitalAuction,
             target: /storage/OrbitalAuction
         )
