@@ -1,9 +1,7 @@
 // Auction.cdc
 //
 // The Orbital Auction contract is a mathematical Auction game on the Flow blockchain.
-//
-// This contract allows users to put their NFTs up for sale. Other users
-// can purchase these NFTs with fungible tokens.
+// 
 //
 import FungibleToken from 0xee82856bf20e2aa6
 import NonFungibleToken from 0x01cf0e2f2f715450
@@ -47,7 +45,7 @@ pub contract OrbitalAuction {
         pub fun logAllOrbInfo(auctionID: UInt64)
     }
 
-    // AuctionAdmin is a resource interface that provides users
+    // AuctionAdmin is a resource interface that provides admin users
     // with access to restricted Auction methods that may impact
     // the outcome of the auction
     //
@@ -57,12 +55,14 @@ pub contract OrbitalAuction {
     pub resource interface AuctionAdmin {
         pub fun checkIsNextEpoch(_ auctionID: UInt64)
         pub fun startNextEpoch(_ auctionID: UInt64)
+        pub fun addPrizeToOrb(_ auctionID: UInt64, orbID: UInt64)
         pub fun payoutOrbs(_ auctionID: UInt64)
     }
 
     // AuctionCollection contains all orbital auctions for an account and provides
     // methods for manipulating and reading data from the auction
     pub resource AuctionCollection: AuctionPublic, AuctionAdmin {
+        
         // The total amount of Auctions in the AuctionCollection
         access(contract) var totalAuctions: UInt64
 
@@ -76,39 +76,51 @@ pub contract OrbitalAuction {
 
         // createNewAuction initializes a new Auction resource with prizes, auction
         // settings and required metadata
+        //
         pub fun createNewAuction(
             totalEpochs: UInt64,
             epochLengthInBlocks: UInt64,
             vault: @FungibleToken.Vault,
             prizes: @NonFungibleToken.Collection
         ) {
+            // Set the auction ID based on the total amount of 
+            // auctions in the collection
             let auctionID = self.totalAuctions + UInt64(1)
             
-            // Create auction Meta
+            // Create the auction Meta
             let AuctionMeta = Meta(
                 auctionID: auctionID,
                 totalEpochs: totalEpochs,
                 epochLengthInBlocks: epochLengthInBlocks
             )
             
-            // Create Auction resource
+            // Create the Auction resource
             let Auction <- create Auction(
                 vault: <- vault,
                 meta: AuctionMeta
             )
             
+            // Add the new auction to the auctions dictionary
             let oldToken <- self.auctions[auctionID] <- Auction
             destroy oldToken
 
+            // Add the prizes to the auction so they can be added to orbs as they
+            // are created
             self.addPrizeCollectionToAuction(auctionID, collection: <-prizes)
+
+            // Create the first Epoch struct to begin the auction
             self.createNewEpoch(auctionID, epochID: UInt64(1))
+
+            // Create the first Orb resource. This will be owned by
+            // the highest bidder at the end of the Epoch
             self.createNewOrb(auctionID)
 
+            // Announce the new auction to the blockchain. Let the people know!
             emit NewAuctionCreated(id: auctionID, totalSessions: totalEpochs)
         }
 
-        // borrowAuction returns a reference to the Auction with the
-        // provided ID
+        // borrowAuction returns a reference to the Auction resource 
+        // with the provided ID
         pub fun borrowAuction(_ auctionID: UInt64): &Auction {
             return &self.auctions[auctionID] as &Auction
         }
@@ -122,26 +134,31 @@ pub contract OrbitalAuction {
             bidTokens: @FungibleToken.Vault,
             address: Address
         ) {
-
+            
+            // Make sure we are bidding on an active Epoch
             self.checkIsNextEpoch(auctionID)
 
             // Get the auction reference
             let auctionRef = self.borrowAuction(auctionID)
 
+            // Panic if auction has already completed. We should not be able to bid.
             if auctionRef.meta.auctionCompleted { panic("auction has already completed") }
 
+            // Store the bid amount for use in the events
             let bidAmount = bidTokens.balance
 
             // If the bidder has already bid...
             if auctionRef.bidderExists(address) {
 
-                // ...increase the existing Bidder's total
+                // ...get the Bidder's Vault reference so we can check if it exists
                 let bidderRef = &auctionRef.bidders[address] as &Bidder
+                let vaultRef = &bidderRef.bidVault as &FungibleToken.Vault
 
-                let vault = &bidderRef.bidVault as &FungibleToken.Vault
-
-                if vault == nil {
-
+                // ...if the Vault reference is nil...
+                if vaultRef == nil {
+                    
+                    // ...create a new resource for the returning Bidder, replacing
+                    // the instance that was moved into an Orb
                     auctionRef.addNewBidder(
                         address: address,
                         bidVault: <-bidTokens,
@@ -149,15 +166,17 @@ pub contract OrbitalAuction {
                         collectionCap: collectionCap
                     )
 
+                // ...if the Vault reference exists...
                 } else {
-
+                    
+                    // ...deposit the bid tokens into the returning Bidder's bidVault
                     bidderRef.bidVault.deposit(from: <-bidTokens)
-
                 }
 
+                // ...emit the UpdateBid event for a returning Bidder
                 emit UpdatedBid(auctionID: auctionRef.meta.auctionID, address: address, bidIncrease: bidAmount, bidTotal: bidderRef.bidVault.balance)
 
-            // ... otherwise...
+            // ... if this is a new Bidder...
             } else {
                 // ... create a new Bidder resource
                 auctionRef.addNewBidder(
@@ -167,159 +186,289 @@ pub contract OrbitalAuction {
                     collectionCap: collectionCap
                 )
 
+                // ...emit the NewBid event for a new Bidder
                 emit NewBid(auctionID: auctionRef.meta.auctionID, address: address, bidTotal: bidAmount)
             }
         }
 
+        // getHighestBidder returns the Bidder resource with the highest
+        // bidVault value
         pub fun getHighestBidder(_ auctionID: UInt64): @Bidder {
+            
+            // Get the Auction reference
             let auctionRef = self.borrowAuction(auctionID)
+
+            // Get a reference to the bidders resource dictionary
             let bidders = &auctionRef.bidders as &{Address: Bidder}
 
+            // TODO: Should return home early, logging to avoid using a panic here
+            // TODO: Auction needs to handle a case where there are no bidders!!
             if bidders.length == 0 { log("there are no bidders") }
 
+            // Set a placeholder value for the highestBidderAddress using the first key
             var highestBidderAddress = bidders.keys[0] 
 
+            // For each address in the Bidders dictionary
             for address in bidders.keys {
+                
+                // Get a reference to the current highest Bidder
                 let highBidder = &bidders[highestBidderAddress] as &Bidder
+                // Get a reference to the current checked Bidder
                 let checkedBidder = &bidders[address] as &Bidder
 
+                // If the checked Bidder's balance is higher than the current highest Bidder's
+                // balance...
                 if checkedBidder.bidVault.balance > highBidder.bidVault.balance {
+                    // ...update the highestBidderAddress to the checked Bidder
                     highestBidderAddress = address
                 }
             }
             
+            // Remove the highest Bidder resource from the Bidders dictionary
             let highestBidder <- bidders[highestBidderAddress] <- nil
 
+            // Return the highest Bidder resource to the caller
             return <- highestBidder!
         }
 
+        // checkIsNextEpoch runs the handleEndOfEpoch method if the
+        // currentBlock height is greater than the endBlock number
+        // of the current Epoch
         pub fun checkIsNextEpoch(_ auctionID: UInt64) {
+            // Get the auction reference
             let auctionRef = self.borrowAuction(auctionID)
+            // Get the current Epoch
             let epoch = auctionRef.borrowCurrentEpoch()
+            // Get the current block height
             let currentBlock = getCurrentBlock().height
 
+            // If the current block height is greater than or equal to
+            // the endBlock for the current Epoch...
             if currentBlock >= epoch.endBlock {
+                // ... if the auction has not completed...
                 if !auctionRef.meta.auctionCompleted {
+                    // ... handle the end of the current Epoch
                     self.handleEndOfEpoch(auctionID)
                 }
             }
         }
 
+        // handleEndOfEpoch moves the highest Bidder resource into the corresponding Orb 
+        // at the end of an Epoch and distributes the tokens from the highest bid according
+        // to the weights for the current epoch
+        //
+        // It will start a new Epoch and create a new Orb if the auction
+        // has not completed. Otherwise it clears the bidders and emits the
+        // AuctionCompleted event
+        //
+        // TODO: Flatten this method
+        // TODO: Handle case if there are no bids
         pub fun handleEndOfEpoch(_ auctionID: UInt64) {
-            let auctionRef = self.borrowAuction(auctionID)
 
-            // TODO: Handle case if there are no bids
+            // Get the auction reference
+            let auctionRef = self.borrowAuction(auctionID)
+            
+            // Get the Orb for the curernt Epoch
             let orb = auctionRef.borrowOrb(auctionRef.meta.currentEpoch)
+            
+            // Get the highest Bidder resource
             let highestBidder <- self.getHighestBidder(auctionID)
+            
+            // Store the Bidder's balance amount for use in events
             let bidAmount = highestBidder.bidVault.balance
 
+            // Withdraw the Bidder's tokens to distribute them to the active Orbs
             let bidderTokens <- highestBidder.bidVault.withdraw(amount: bidAmount)
 
+            // Distribute the Bidder's tokens to the active Orbs
             auctionRef.distributeBidTokens(<-bidderTokens)
 
+            // Assign the highest bidder to the orb for the current Epoch
             orb.assignOwner(bidder: <-highestBidder)
 
+            // Emit the OrbOwnerAssigned event
             emit OrbOwnerAssigned(auctionID: auctionID, orbID: orb.id, owner: orb.bidder?.address!)
 
-            self.logCurrentEpochInfo(auctionID)
-
+            // If this is the final Epoch...
             if auctionRef.meta.currentEpoch >= auctionRef.meta.totalEpochs {
 
+                // ...the Auction has completed
                 auctionRef.meta.auctionCompleted = true
-
+                // ...clear the remaining Bidders, returning their unused bids
                 auctionRef.clearBidders()
-
+                // ...emit the AuctionCompleted event
                 emit AuctionCompleted(auctionID: auctionID)
 
+            // ...if this is not the final Epoch
             } else {
-
+                
+                // ...start a new Epoch
                 self.startNextEpoch(auctionID)
+                // ...create a new Orb
                 self.createNewOrb(auctionID)
             }
         }
 
+        // startNextEpoch creates the next Epoch and updates the currentEpoch
+        // value in the Auction meta data to the new Epoch ID
         pub fun startNextEpoch(_ auctionID: UInt64) {
+            
+            // Get the auction reference
             let auctionRef = self.borrowAuction(auctionID)
+
+            // Get the current Epoch
             let currentEpoch = auctionRef.borrowCurrentEpoch()
 
+            // Increment the previous Epoch ID by one to set the new Epoch ID
             let newEpochID = currentEpoch.id + UInt64(1)
             
+            // Create the new Epoch
             self.createNewEpoch(auctionID, epochID: newEpochID)
+
+            // Update the currentEpoch ID in the AuctionMeta
             auctionRef.meta.currentEpoch = newEpochID
 
+            // Get the newEpoch data
             let newEpoch = auctionRef.borrowCurrentEpoch()
 
+            // Emit the NewEpochStarted event
             emit NewEpochStarted(auctionID: auctionID, epochID: newEpochID, epochEndBlock: newEpoch.endBlock)
         }
 
+        // createNewEpoch initializes a new Epoch struct and adds it to the 
+        // designated Auction's epochs dictionary
         pub fun createNewEpoch(_ auctionID: UInt64, epochID: UInt64) {
+            
+            // Get the Auction reference
             let auctionRef = self.borrowAuction(auctionID)
 
+            // Get the final block number for the new epoch by adding the Auction's
+            // epochLength value to the current block number
             let endBlock = getCurrentBlock().height + auctionRef.meta.epochLength
 
+            // Create the new Epoch struct
             let newEpoch = Epoch(id: epochID, endBlock: endBlock)
 
+            // Add the new Epoch to the Auction's epochs dictionary
             auctionRef.epochs[newEpoch.id] = newEpoch
         }
 
+
+        // createNewOrb creates a new Orb resource for the highest Bidder of 
+        // the current Epoch and adds it to the designated Auction's orbs dictionary
+        //
+        // an empty vault is created for the new Orb by withdrawing 0 tokens from 
+        // the Auction's masterVault. The masterVault is provided on auction creation
+        // to keep the entire contract composable. Any FungibleToken that adheres to the
+        // onflow token standard can bew used to create the masterVault
+        //
         pub fun createNewOrb(_ auctionID: UInt64) {
+
+            // Get the Auction reference
             let auctionRef = self.borrowAuction(auctionID)
+
+            // Get the current Epoch
             let currentEpoch = auctionRef.meta.currentEpoch
 
+            // Create a new Orb
             let newOrb <- create Orb(
                 auctionID,
                 id: currentEpoch,
                 vault: <-auctionRef.masterVault.withdraw(amount: UFix64(0))
             )
 
+            // Add the orb to the Auction's orbs dictionary
             let oldOrb <- auctionRef.orbs[currentEpoch] <- newOrb
             destroy oldOrb
 
+            // Add an NFT prize to the Orb
             self.addPrizeToOrb(auctionID, orbID: currentEpoch)
         }
 
+        // addPrizeToAuction adds a single Prize to the Auction's prizes dictionary
         pub fun addPrizeToAuction(_ auctionID: UInt64, prize: @NonFungibleToken.NFT) {
+            
+            // Get the auction reference
             let auctionRef = self.borrowAuction(auctionID)
+
+            // Increment the length og the prizes dictionary to set the new Prize ID
             let prizeID = UInt64(auctionRef.prizes.length + 1)
 
+            // Add the Prize to the prizes dictionary
             auctionRef.prizes[prizeID] <-! prize
         }
 
+        // addPrizeCollectionToAuction adds a Collection of NFTs to the Auction's prizes dictionary
         pub fun addPrizeCollectionToAuction(_ auctionID: UInt64, collection: @NonFungibleToken.Collection) {
-
+            
+            // For each token ID in the Collection's array of token IDs...
             for tokenID in collection.getIDs() {
+                
+                // Withdraw the NFT from the Collection
                 let token <- collection.withdraw(withdrawID: tokenID)
+                
+                // Add the NFT to the Auction's prizes dictionary 
                 self.addPrizeToAuction(auctionID, prize: <-token)
             }
 
+            // Destroy the empty NFT Collection
             destroy collection
         }
 
+        // addPrizeToOrb assigns a Prize to the Orb with the same ID. This method can
+        // be used by an AuctionAdmin to assign a Prize to an Orb after it's Epoch has expired
         pub fun addPrizeToOrb(_ auctionID: UInt64, orbID: UInt64) {
+            
+            // Get the Auction reference
             let auctionRef = self.borrowAuction(auctionID)
+
+            // Get the Orb reference
             let orbRef = &auctionRef.orbs[orbID] as &Orb
 
+            // If the Orb doesn't exist...
             if orbRef == nil {
+                // ...panic and revert the transaction
                 panic("Orb doesn't exist yet")
             }
 
+            // If there is a Prize available for this Orb...
             if let prize <- auctionRef.prizes[orbID] <- nil {
+                // ...Assign the prize to the Orb
                 orbRef.assignPrize(prize: <-prize)
+            // ...If there is no prize available...
             } else {
+                // ...let the user know they haven't added a prize yet
                 log("No prize available for this epoch")
             }
         }
 
+        // payoutOrbs send the Prizes and FungibleTokens from the Orb to
+        // the Orb's owner if the Auction has completed
         pub fun payoutOrbs(_ auctionID: UInt64) {
+            
+            // Get the Auction Reference
             let auctionRef = self.borrowAuction(auctionID)
 
+            // If the Auction has completed...
             if auctionRef.meta.auctionCompleted {
+
+                // For each Orb in the Auction...
                 for orb in auctionRef.orbs.keys {
+
+                    // Get the Orb reference
                     let orb = &auctionRef.orbs[orb] as &Orb
+
+                    // Send the Prize to the owner
                     orb.sendPrizeToOwner()
+
+                    // Send the Tokens to the owner
                     orb.sendTokensToOwner()
                 }
+
+            // ...If the Auction has not completed...
             } else {
+
+                // ...let the user know the Orbs can not be paid out yet
                 log("Auction has not completed. Can not payout Orbs yet...")
             }
 
@@ -329,17 +478,25 @@ pub contract OrbitalAuction {
         // getAuctionInfo returns an array of Auction references that belong to
         // the AuctionCollection
         pub fun getAuctionInfo(): [&Auction] {
-
+            
+            // Get an array of the Auction IDs in the collection
             let auctions = self.auctions.keys
+
+            // Create an empty array of Auction references
             let auctionInfo: [&Auction] = []
             
+            // For each ID in the auctions array...
             for id in auctions {
+
+                // ...append the Auction reference to the auctionInfo array
                 auctionInfo.append(self.borrowAuction(id))
             }
 
+            // return the array of Auction references to the caller
             return auctionInfo
         }
 
+        // logCurrentEpochInfo logs the state of the current Epoch
         pub fun logCurrentEpochInfo(_ auctionID: UInt64) {
             let auctionRef = self.borrowAuction(auctionID)
             let epoch = auctionRef.borrowCurrentEpoch()
@@ -387,7 +544,12 @@ pub contract OrbitalAuction {
         // getAuctionBidders returns a dictionary containing the bidder's address
         // and bid total
         pub fun getAuctionBidders(_ auctionID: UInt64): {Address: UFix64} {
+
+            // Get the Auction reference
             let auction = self.borrowAuction(auctionID)
+
+            // Return a dictionary of Bidder addresses and their bid totals to
+            // the caller
             return auction.getBidders()
         }
 
@@ -414,25 +576,32 @@ pub contract OrbitalAuction {
             self.meta = meta
         }
 
+        // borrowOrb returns a reference to the Orb to the caller
         pub fun borrowOrb(_ orbID: UInt64): &Orb {
             return &self.orbs[orbID] as &Orb
         }
 
+        // borrowCurrentEpoch returns a reference to the current 
+        // Epoch to the caller
         pub fun borrowCurrentEpoch(): &Epoch {
             return &self.epochs[self.meta.currentEpoch] as &Epoch
         }
 
+        // borrowCurrentEpoch returns a reference to the Epoch 
+        // with the provided ID to the caller
         pub fun borrowEpoch(_ epoch: UInt64): &Epoch {
             return &self.epochs[epoch] as &Epoch
         }
 
-        // addNewBidder adds a new Bidder resource to the auction
+        // addNewBidder adds a new Bidder resource to the Auction's
+        // bidders dictionary
         access(contract) fun addNewBidder(
             address: Address,
             bidVault: @FungibleToken.Vault,
             vaultCap: Capability<&{FungibleToken.Receiver}>,
             collectionCap: Capability<&{NonFungibleToken.CollectionPublic}>) {
             
+            // Create the new Bidder resource
             let bidder <- create Bidder(
                 address: address,
                 bidVault: <-bidVault,
@@ -440,6 +609,7 @@ pub contract OrbitalAuction {
                 collectionCap: collectionCap
             )
 
+            // Add the resource to the bidders dictionary
             self.bidders[address] <-! bidder
         }
 
@@ -453,43 +623,80 @@ pub contract OrbitalAuction {
             }
         }
 
+        // distributeBidTokens sends the tokens from the provided Vault to the
+        // Orbs designated by the current Epoch distribution weights. Each Orb
+        // gets a percentage of the tokens as determined by the current Epoch
+        //
         access(contract) fun distributeBidTokens(_ vault: @FungibleToken.Vault) {
+            
+            // Store the initial balance of the provided Vault
             let initialBalance = vault.balance
+
+            // Get the current Epoch weights
             let epoch = self.borrowCurrentEpoch()
             let weights = epoch.distribution.weights
 
+            // For each Orb ID in the distribution weights dictionary...
             for id in weights.keys {
+
+                // ...borrow a reference to the Orb
                 let orb = self.borrowOrb(id)
+
+                // ...calculate the tokens for the Orb by multiplying the
+                // initial Vault balance by the distribution weight of the Orb
                 let withdrawAmount = initialBalance * weights[id]!
+
+                // ...withdraw the tokens from the provided Vault
                 let tokens <- vault.withdraw(amount: withdrawAmount)
 
+                // ...deposit the tokens in the Orb's Vault
                 orb.vault.deposit(from: <-tokens)
                 
+                // ...emit the OrbBalanceIncreased event
                 emit OrbBalanceIncreased(auctionID: self.meta.auctionID, orbID: orb.id, amount: withdrawAmount)
             }
 
+            // Destroy the empty Vault
             destroy vault
         }
 
+        // clearBidders removes all Bidder resources from the bidders dictionary
         access(contract) fun clearBidders() {
+
+            // For each Bidder address in the bidders dictionary...
             for address in self.bidders.keys {
+
+                // ...remove the Bidder from the dictionary
                 let bidder <- self.bidders[address] <- nil
+
+                // ...destroy the Bidder resource
                 destroy bidder
             }
         }
         
-        // getBidders returns a dictionary with the bidder's address and
-        // bidTotal
+        // getBidders returns a dictionary with the bidder's address and bidTotal
         access(contract) fun getBidders(): {Address: UFix64} {
+
+            // Borrow a reference to the bidders dictionary
             let bidders = &self.bidders as &{Address: Bidder}
-            let dictionary: {Address: UFix64} = {}
+
+            // Create an empty dictionary to store the Bidder address
+            // and bidVault balance
+            let bidderMeta: {Address: UFix64} = {}
             
+            // For each Bidder address in the bidders dictionary...
             for address in bidders.keys {
+
+                // ...borrow a reference to the Bidder
                 let bidder = &bidders[address] as &Bidder
-                dictionary[address] = bidder.bidVault.balance
+
+                // ...store the Bidder address and Vault balance
+                // in the bidderMeta dictionary
+                bidderMeta[address] = bidder.bidVault.balance
             }
             
-            return dictionary
+            // return the bidderMeta dictionary to the caller
+            return bidderMeta
         }
 
 
