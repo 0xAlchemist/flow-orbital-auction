@@ -1,4 +1,4 @@
-// list/add_prizes_to_orbs.cdc
+// create_auction/add_prizes_to_orbs.cdc
 // *************************
 // This transaction must be signed by the Auction Admin
 //

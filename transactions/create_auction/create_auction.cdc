@@ -1,4 +1,4 @@
-// list/create_auction.cdc
+// create_auction/create_auction.cdc
 // *************************
 // This transaction takes an epochCount UInt64 and an
 // epochLengthInBlocks UInt64 and creates a new Auction
