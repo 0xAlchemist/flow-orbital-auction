@@ -1,4 +1,11 @@
-// This transaction pays out tokens to the hardcoded account
+// run/check_update_epoch.cdc
+// *************************
+// This transaction must be run by the Auction Admin
+//
+// This transaction takes an auctionID UInt64 and calls
+// a method that checks whether the curent Epoch has
+// expired. It is used to advance the auction to the
+// end for our project demonstration
 
 import OrbitalAuction from 0xe03daebed8ca0615
 
@@ -10,14 +17,17 @@ import OrbitalAuction from 0xe03daebed8ca0615
 
 transaction(auctionID: UInt64) {
 
-    let auctionRef: &{OrbitalAuction.AuctionAdmin}
+    let auctionAdminRef: &{OrbitalAuction.AuctionAdmin}
 
     prepare(account: AuthAccount) {
-
-        self.auctionRef = account.borrow<&{OrbitalAuction.AuctionAdmin}>(from: /storage/OrbitalAuction)!
+        
+        // Borrow a reference to the AuctionAdmin interface from the signer's storage
+        self.auctionAdminRef = account.borrow<&{OrbitalAuction.AuctionAdmin}>(from: /storage/OrbitalAuction)!
     }
 
     execute {
-        self.auctionRef.checkIsNextEpoch(auctionID)
+
+        // Run the checkIsNextEpoch method on the Auction
+        self.auctionAdminRef.checkIsNextEpoch(auctionID)
     }
 }
