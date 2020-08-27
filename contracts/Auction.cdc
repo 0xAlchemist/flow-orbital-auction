@@ -55,6 +55,7 @@ pub contract OrbitalAuction {
     pub resource interface AuctionAdmin {
         pub fun checkIsNextEpoch(_ auctionID: UInt64)
         pub fun startNextEpoch(_ auctionID: UInt64)
+        pub fun addPrizeCollectionToAuction(_ auctionID: UInt64, collection: @NonFungibleToken.Collection)
         pub fun addPrizeToOrb(_ auctionID: UInt64, orbID: UInt64)
         pub fun payoutOrbs(_ auctionID: UInt64)
     }
