@@ -727,6 +727,7 @@ pub contract OrbitalAuction {
             self.vault <- vault
         }
 
+        // assignOwner takes a Bidder resource and adds it to the Orb
         access(contract) fun assignOwner(bidder: @Bidder) {
             pre {
                 self.bidder == nil: "Orb already has an owner"
@@ -734,60 +735,90 @@ pub contract OrbitalAuction {
             self.bidder <-! bidder
         }
 
+        // assignPrize takes a NonFungibleToken resource and adds it to the Orb
         access(contract) fun assignPrize(prize: @NonFungibleToken.NFT) {
             pre {
                 self.prize == nil: "Orb already has a prize"
             }
             self.prize <-! prize
 
+            // emit the NewPrizeAddedToOrb event
             emit NewPrizeAddedToOrb(auctionID: self.auctionID, orbID: self.id, tokenID: self.prize?.id!)
         }
 
+        // sendPrizeToOwner sends the NonFungibleToken Prize to the Orb owner if
+        // a Prize exists and the owner has the proper Capability
         access(contract) fun sendPrizeToOwner() {
             pre {
                 self.bidder != nil: "Orb has no owner"
             }
 
+            // Get the Orb owner's NonFungibleToken Collection Capability
             let collectionCap = self.bidder?.collectionCap??
                 panic("Orb owner has no collection capability")
 
+            // Borrow a reference to the Orb owner's NonFungibleToken Collection
             let collectionRef = collectionCap.borrow()??
                 panic("Couldn't borrow Orb owner collection reference")
 
+            // If the Orb has a Prize...
             if let prize <- self.prize <- nil {
+
+                // ...get the Prize ID
                 let tokenID = prize.id
+
+                // ...deposit the Prize into the Orb owner's NonFungibleToken Collection
                 collectionRef.deposit(token: <-prize)
 
+                // ...emit the OrbPrizeRedeemed event
                 emit OrbPrizeRedeemed(auctionID: self.auctionID, orbID: self.id, address: self.bidder?.address!, tokenID: tokenID)
+            
+            // ...if the Orb has no Prize
             } else {
+                
+                // ...log a message to the console for testing the contract
                 log("Orb has no prize")
             }
         }
 
+        // sendTokensToOwner send the balance of the Orb's Vault to the Orb owner's 
+        // FungibleToken Vault if the Orb's Vault balance is greater than zero and
+        // the Orb owner has the required Vault Capability
+        //
         access(contract) fun sendTokensToOwner() {
             pre {
                 self.vault.balance > UFix64(0): "Vault has no token balance"
             }
 
+            // Get the Orb owner's FungibleToken Vault Recevier Capability
             let vaultCap = self.bidder?.vaultCap??
                 panic("Orb owner has no vault receiver capability")
 
+            // Borrow a reference to the owner's Vault Receiver
             let vaultRef = vaultCap.borrow()??
                 panic("Couldn't borrow Orb owner vault receiver reference")
 
+            // Withdraw the entire Vault balance from the Orb
             let vaultBalance = self.vault.balance
             let tokens <- self.vault.withdraw(amount: vaultBalance)
 
+            // Deposit the FungibleTokens into the Orb owner's FungibleToken Vault
             vaultRef.deposit(from: <-tokens)
 
+            // Emit the OrbTokensRedeemed event
             emit OrbTokensRedeemed(auctionID: self.auctionID, orbID: self.id, address: self.bidder?.address!, amount: vaultBalance)
         }
 
+        // logOwner logs the Orb owner's address to the console
         pub fun logOwner() {
             log(self.bidder?.address)
         }
 
         destroy() {
+            // Safely destroy the Orb by sending the Prize and tokens to the Owner
+            //
+            // TODO: Add a solution for destroyed Orbs with no owner
+            // - send Prizes back to OG seller
             self.sendPrizeToOwner()
             self.sendTokensToOwner()
             
@@ -823,18 +854,33 @@ pub contract OrbitalAuction {
             self.collectionCap = collectionCap
         }
 
+        // returnBidderTokens withdraws the tokens from the Bidder's bidVault and
+        // desposits them to the FungibleToken Vault Receiver the Bidder provided
+        // when placing their bid
+        //
         access(self) fun returnBidderTokens() {
+
+            // Get the bidVault balance
             let vaultBalance = self.bidVault.balance
+
+            // Borrow a reference to the bidder's Vault Receiver Capability
             let vaultReceiver = self.vaultCap.borrow()
+
+            // Withdraw the tokens from the bidVault
             let vaultTokens <- self.bidVault.withdraw(amount: vaultBalance)
 
+            // Deposit the tokens from the bidVault into the Bidder account's
+            // FungibleToken Vault
             vaultReceiver!.deposit(from: <-vaultTokens)
 
             emit UnusedBidsReturned(address: self.address, amount: vaultBalance)
         }
 
         destroy() {
+            
+            // Return unused bidder tokens before destroying the Bidder resource
             self.returnBidderTokens()
+
             destroy self.bidVault
         }
     }
@@ -887,84 +933,158 @@ pub contract OrbitalAuction {
         pub(set) var sumFactors: UInt64
         pub(set) var sqrtVal: UInt64
 
-        init(_ session: UInt64) {
+        init(_ epoch: UInt64) {
             self.weights = {}
             self.sumFactors = 0
             self.sqrtVal = 0
 
-            self.updateFields(session)
+            // Update the field values on init
+            self.updateFields(epoch)
         }
 
+        // updateFields takes a number and calls each method to set
+        // the field values as required. 
+        //
+        // Splitting these methods up and using static field
+        // values helped increase the amount of Epochs we could calculate 
+        // on-chain
         pub fun updateFields(_ n: UInt64) {
+
+            // Set the floored square root value for the number
             self.sqrtVal = self.sqrt(n)
+
+            // Set the sum of the number's factors
             self.sumFactors = self.sumOfFactors(n)
+
+            // Set the number's distribution weights
             self.weights = self.getWeights(n)
         }
 
-        pub fun getWeights(_ n: UInt64): {UInt64: UFix64} {
+        // getWeights takes number and returns a dictionary of Orb IDs
+        // and their calcualted distribution weights
+        access(self) fun getWeights(_ n: UInt64): {UInt64: UFix64} {
+            
+            // Create an empty dictionary for the OrbIDs and distribution weights
             var weights: {UInt64: UFix64} = {}
-            var i = UInt64(1)
 
+            // Create an incrementor variable starting at 1
+            var i = UInt64(1)
+            
+            // While the incrementor value is less than the incremented Epoch ID
             while i < n + UInt64(1) {
+                
+                // ...if the Epoch ID is evenly divisible by the incrementor
                 if n % i == UInt64(0) {
+
+                    // .. add the incrementor value to the weights dictionary as an ID
+                    // and add the quotient of the incrementor divided by the sum of 
+                    // the Epoch's factors as the distribution weight for the incrementor
                     weights[i] = (UFix64(i) / UFix64(self.sumFactors))
                 }
+
+                // ...increase the incrementor by 1
                 i = i + UInt64(1)
             }
+
+            // Return the weights dictionary to the caller
             return weights
         }
 
-        pub fun sumOfFactors(_ n: UInt64): UInt64 {
+        // sumOfFactors takes a number as an argument and returns the sum of 
+        // it's factors 
+        access(self) fun sumOfFactors(_ n: UInt64): UInt64 {
+            
+            // If the number equals 1, return 1
             if n == UInt64(1) {
                 return n
             }
 
-            // sum of divisors
+            // Set the initial result to 0
             var res = UInt64(0)
+
+            // Set an incrementor to 2 as we're handling a
+            // case for 1 at the start of the method
             var i = UInt64(2)
 
-            while i <= self.sqrtVal {
 
+            // While the incrementor is less than or equal 
+            // to the square root value of the number
+            while i <= self.sqrtVal {
+                
+                // ...if the number is evenly divisible by the incrementor...
                 if n % i == UInt64(0) {
+
+                    // ...if the incrementor is equal to the number divided
+                    // by the incrementor...
                     if i == (n / i) {
+
+                        // ... add the incrementor value to the result
                         res = res + i
+
+                    // ...if the incrementor is not equal to the number divided
+                    // by the incrementor
                     } else {
+
+                        // ...divide the number by the incrementor, add the quotient
+                        // to the incrementor and add it to the result
                         res = res + (i + n/i)
                     }
                 }
 
+                // Update the incrementor by one
                 i = i + UInt64(1)
             }
 
+            // Increment the number by one and add it to the result
             res = res + n + UInt64(1)
+
+            // Return the result to the caller
             return res
         }
 
-        pub fun sqrt(_ n: UInt64): UInt64 {
+        // sqrt takes a number and returns the floored square root of the
+        // provided number
+        access(self) fun sqrt(_ n: UInt64): UInt64 {
+            
+            // If the number equals zero
             if n == UInt64(0) {
+
+                // Return the number
                 return n
             }
 
+            // If the number equals one
             if n == UInt64(1) {
+
+                // Return the number
                 return n
             }
 
-            var i = UInt64(1)
+            // Set the inital result to one
             var res = UInt64(1)
 
+            // Set an incrementor to one
+            var i = UInt64(1)
+
+            // While the result is less than or equal to the number
             while res <= n {
+
+                // Add one tot he incrementor
                 i = i + UInt64(1)
+
+                // Set the result to the incrementor value squared
                 res = i * i
             }
 
+            // Subtract one from the incrementor and return it to the caller
             return i - UInt64(1)
         }
     }
 
-    // createAuctionCollection returns a new AuctionCollection resource to the caller
+    // createAuctionCollection returns a new AuctionCollection resource 
+    // to the caller
     pub fun createAuctionCollection(): @AuctionCollection {
         let AuctionCollection <- create AuctionCollection()
-
         return <- AuctionCollection
     }
 
