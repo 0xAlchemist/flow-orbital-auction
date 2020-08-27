@@ -353,7 +353,7 @@ pub contract OrbitalAuction {
             log("End Block")
             log(epoch.endBlock)
             log("Distribution")
-            log(epoch.distribution)
+            log(epoch.distribution.weights)
         }
 
         pub fun logOrbInfo(auctionID: UInt64, orbID: UInt64) {
