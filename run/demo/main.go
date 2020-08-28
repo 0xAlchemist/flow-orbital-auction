@@ -246,11 +246,6 @@ func main() {
 		flow.RunScript("check_account", flow.FindAddress(bidder), cadence.NewString(bidder))
 	}
 
-	promptAdvance("The Orb vault balances are now zero:")
-
-	// CHECK ORBS
-	flow.RunScript("check_orb_balances", flow.FindAddress(auction), cadence.UInt64(1))
-
 	println()
 	println("That's it!")
 	println("**********")
