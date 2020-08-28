@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/onflow/cadence"
 	"github.com/versus-flow/go-flow-tooling/tooling"
 )
 
@@ -22,6 +23,6 @@ func main() {
 
 	// CHECK BIDDER ACCOUNTS
 	for _, bidder := range bidders {
-		flow.RunScript("check_account", flow.FindAddress(bidder))
+		flow.RunScript("check_account", flow.FindAddress(bidder), cadence.NewString(bidder))
 	}
 }

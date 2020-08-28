@@ -150,6 +150,7 @@ func main() {
 	println()
 	println("A new auction has been created")
 	println()
+
 	flow.RunScript("check_auctions", flow.FindAddress(auction))
 
 	println()
@@ -194,7 +195,8 @@ func main() {
 	// CHECK CURRENT EPOCH
 	flow.RunScript("check_epoch", flow.FindAddress(auction), cadence.UInt64(1))
 
-	println("You can see that we're in the final Epoch, 6 blocks away from the end of the auction.")
+	println()
+	println("We're in the final Epoch, 6 blocks away from the end of the auction.")
 	println()
 	println("You can also see the percentage of the highest bid that will be paid to each Orb at the end of the Epoch.")
 	println("(ie. Orb #1 gets %6.66 of the payout)")
@@ -208,7 +210,7 @@ func main() {
 
 	// CHECK BIDDER ACCOUNTS
 	for _, bidder := range bidders {
-		flow.RunScript("check_account", flow.FindAddress(bidder))
+		flow.RunScript("check_account", flow.FindAddress(bidder), cadence.NewString(bidder))
 	}
 
 	promptAdvance("The highest bidders have been assigned to their Orbs:")
@@ -235,7 +237,7 @@ func main() {
 
 	// CHECK BIDDER ACCOUNTS
 	for _, bidder := range bidders {
-		flow.RunScript("check_account", flow.FindAddress(bidder))
+		flow.RunScript("check_account", flow.FindAddress(bidder), cadence.NewString(bidder))
 	}
 
 	promptAdvance("We can see who won each Orb and that the Orb vault balances are now zero:")
