@@ -19,8 +19,34 @@ pub fun main(account: Address) {
     // and borrowing a reference from the capability
     let auctionCap = account.getCapability(/public/OrbitalAuction)!
 
-    if let auctionRef = auctionCap.borrow<&{OrbitalAuction.AuctionPublic}>() {
-        log(auctionRef.getAuctionInfo())
+    if let auctionCollectionRef = auctionCap.borrow<&{OrbitalAuction.AuctionPublic}>() {
+
+        let auctionInfo = auctionCollectionRef.getAuctionMeta(UInt64(1))
+
+        // Set the auction status
+        var auctionStatus = "Status: Active"
+        if auctionInfo.auctionCompleted == true {
+            auctionStatus = "Status: Inactive (Completed)"
+        }
+
+        // Concatenate the log output for better readability
+        let auctionID = "Auction ID: ".concat(auctionInfo.auctionID.toString())
+        let epochCount = "Epochs: ".concat(auctionInfo.totalEpochs.toString())
+        let epochLength = "Epoch Length: ".concat(auctionInfo.epochLength.toString())
+        let currentEpoch = "Current Epoch: ".concat(auctionInfo.currentEpoch.toString())
+
+        log("********************")
+        log(auctionID)
+        log("********************")
+        log("Auction Settings")
+        log(epochCount)
+        log(epochLength)
+        log("********************")
+        log("Auction Status")
+        log(auctionStatus)
+        log(currentEpoch)
+        log("********************")
+
     } else {
         log("unable to borrow orbital auction reference")
     }

@@ -49,8 +49,10 @@ func main() {
 
 	println()
 	println("Orbital Auction | Proof of Concept Demo")
+	println()
+	print("Blockchain output will appear in the emulator terminal window.\n\nThis demonstration is best run with split terminal panes")
 
-	promptAdvance("Deploying smart contracts to the emulator")
+	promptAdvance("Deploy smart contracts to the emulator")
 
 	// Deploy Smart Contracts to Emulator Accounts
 	flow.DeployContract(nonFungibleToken)
@@ -63,10 +65,10 @@ func main() {
 	println()
 	println("Set up the auction host account:")
 	println()
-	println("- create the auction host account")
-	println("- create empty FungibleToken Vault")
-	println("- create empty NonFungibleToken Collection")
-	println("- create empty OrbitalAuction Collection")
+	println("* create the auction host account")
+	println("* create empty FungibleToken Vault")
+	println("* create empty NonFungibleToken Collection")
+	println("* create empty OrbitalAuction Collection")
 
 	promptAdvance("Proceed with setting up the auction host account.")
 
@@ -78,8 +80,8 @@ func main() {
 	println()
 	println("Create and set up the 6 bidder accounts:")
 	println()
-	println("- create empty FungibleToken Vault")
-	println("- create empty NonFungibleToken Collection")
+	println("* create empty FungibleToken Vault")
+	println("* create empty NonFungibleToken Collection")
 
 	promptAdvance("Proceed with setting up the bidder accounts.")
 
@@ -199,7 +201,7 @@ func main() {
 	println("We're in the final Epoch, 6 blocks away from the end of the auction.")
 	println()
 	println("You can also see the percentage of the highest bid that will be paid to each Orb at the end of the Epoch.")
-	println("(ie. Orb #1 gets %6.66 of the payout)")
+	println("* (ie. Orb #1 gets %6.66 of the payout)")
 
 	promptAdvance("Let's take a look at the active bids for the current Epoch:")
 
@@ -217,6 +219,14 @@ func main() {
 
 	// CHECK ORBS
 	flow.RunScript("check_orbs", flow.FindAddress(auction), cadence.UInt64(1))
+
+	promptAdvance("Let's take a closer look at the Orb balances...")
+
+	// CHECK ORB BALANCES
+	flow.RunScript("check_orb_balances", flow.FindAddress(auction), cadence.UInt64(1))
+
+	println()
+	print("Notice that certain Orbs get paid more than others!\n\nBeing the highest bidder during the right Epoch is very important.")
 
 	promptAdvance("Now we'll fast-forward to the end of the auction:")
 
@@ -243,7 +253,7 @@ func main() {
 	promptAdvance("We can see who won each Orb and that the Orb vault balances are now zero:")
 
 	// CHECK ORBS
-	flow.RunScript("check_orbs", flow.FindAddress(auction), cadence.UInt64(1))
+	flow.RunScript("check_orb_balances", flow.FindAddress(auction), cadence.UInt64(1))
 
 	println()
 	println("That's it!")
