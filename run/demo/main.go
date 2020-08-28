@@ -81,6 +81,7 @@ func main() {
 	println()
 	println("Create and set up the 6 bidder accounts:")
 	println()
+	println("* create the bidder account")
 	println("* create empty FungibleToken Vault")
 	println("* create empty NonFungibleToken Collection")
 
@@ -118,12 +119,6 @@ func main() {
 	promptAdvance("Proceed to create DemoToken minter.")
 
 	flow.SendTransactionWithArguments("setup/new_demotoken_minter", demoToken, ufix("1000000.0"))
-
-	// promptAdvance("Mint tokens for auction owner")
-
-	// flow.SendTransactionWithArguments("setup/mint_demotokens", demoToken,
-	// 	flow.FindAddress(auction), // Receiver address
-	// 	ufix("100000.0"))          // Amount of minted tokens
 
 	promptAdvance("Mint 100,000 tokens for each bidder")
 
@@ -251,7 +246,7 @@ func main() {
 		flow.RunScript("check_account", flow.FindAddress(bidder), cadence.NewString(bidder))
 	}
 
-	promptAdvance("We can see who won each Orb and that the Orb vault balances are now zero:")
+	promptAdvance("The Orb vault balances are now zero:")
 
 	// CHECK ORBS
 	flow.RunScript("check_orb_balances", flow.FindAddress(auction), cadence.UInt64(1))
