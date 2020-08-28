@@ -50,7 +50,8 @@ func main() {
 	println()
 	println("Orbital Auction | Proof of Concept Demo")
 	println()
-	print("Blockchain output will appear in the emulator terminal window.\n\nThis demonstration is best run with split terminal panes")
+	println("Blockchain output will appear in the emulator terminal window.")
+	println("This demonstration is best run with split terminal panes.")
 
 	promptAdvance("Deploy smart contracts to the emulator")
 
