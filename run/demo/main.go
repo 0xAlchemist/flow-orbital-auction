@@ -67,8 +67,8 @@ func main() {
 	println("Set up the auction host account:")
 	println()
 	println("* create the auction host account")
-	println("* create empty FungibleToken Vault")
-	println("* create empty NonFungibleToken Collection")
+	println("* create empty DemoToken Vault")
+	println("* create empty Rock Collection")
 	println("* create empty OrbitalAuction Collection")
 
 	promptAdvance("Proceed with setting up the auction host account.")
@@ -82,8 +82,8 @@ func main() {
 	println("Create and set up the 6 bidder accounts:")
 	println()
 	println("* create the bidder account")
-	println("* create empty FungibleToken Vault")
-	println("* create empty NonFungibleToken Collection")
+	println("* create empty DemoToken Vault")
+	println("* create empty Rock Collection")
 
 	promptAdvance("Proceed with setting up the bidder accounts.")
 
@@ -102,9 +102,9 @@ func main() {
 	}
 
 	println()
-	println(fmt.Sprintf("Mint %d NFTs to use as auction prizes", amountNFTs))
+	println(fmt.Sprintf("Mint %d Rocks to use as auction prizes", amountNFTs))
 
-	promptAdvance("Proceed with minting NFTs.")
+	promptAdvance("Proceed with minting Rocks.")
 
 	// Mint DemoTokens for each account
 	for i := 0; i < amountNFTs; i++ {
@@ -112,7 +112,7 @@ func main() {
 	}
 
 	println()
-	println("NFTs have been minted and deposited in the auction host's NFT collection")
+	println("Rocks have been minted and deposited in the auction host's Rock collection")
 	println()
 	println("Create a new DemoToken minter with an allowed amount of 1,000,000 tokens for the DemoToken Admin")
 
@@ -127,7 +127,7 @@ func main() {
 			flow.FindAddress(bidder), // Receiver address
 			ufix("100000.0"))         // Amount of minted tokens
 
-		println("Fungible tokens have been minted and deposited for", bidder)
+		println("DemoTokens have been minted and deposited for", bidder)
 	}
 
 	// CREATE NEW ORBITAL AUCTION
@@ -137,7 +137,7 @@ func main() {
 	println("Epochs - 8")
 	println("Epoch Length - 12 blocks")
 	println()
-	print("* Epochs are a unit of time measured in blocks.\n\n* At the end of each Epoch, the highest bidder gets assigned as an owner to the Epoch's 'Orb'.\n\n* The 'Orbs' are resources that contain DemoTokens and Prizes (Rock NFTs) that are paid out at to the owners the end of an auction.\n")
+	print("* Epochs are a unit of time measured in blocks.\n\n* At the end of each Epoch, the highest bidder gets assigned as an owner to the Epoch's 'Orb'.\n\n* The 'Orbs' are resources that contain DemoTokens and Prizes (Rock NFTs) that are paid out to the owners the end of an auction.\n")
 
 	promptAdvance("Proceed to create a new auction.")
 
