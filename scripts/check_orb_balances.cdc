@@ -3,6 +3,7 @@
 
 import OrbitalAuction from 0xe03daebed8ca0615
 
+
 // Contract Deployment:
 // Acct 1 - 0x01cf0e2f2f715450 - onflow/NonFungibleToken.cdc
 // Acct 2 - 0x179b6b1cb6755e31 - demo-token.cdc
@@ -19,23 +20,7 @@ pub fun main(auctionOwner: Address, auctionID: UInt64) {
     let auctionCap = account.getCapability(/public/OrbitalAuction)!
 
     if let auctionRef = auctionCap.borrow<&{OrbitalAuction.AuctionPublic}>() {
-        let bidders = auctionRef.getAuctionBidders(auctionID)
-        
-        log("**************")
-        log("Active Bids")
-        log("**************")
-        
-        if bidders.length == 0 { 
-            log("There are no active bidders")
-        }
-        
-        for address in bidders.keys {
-            log("********************")
-            log(address)
-            log(bidders[address])
-            log("********************")
-        }
-
+        log(auctionRef.logAllOrbBalances(auctionID))
     } else {
         log("unable to borrow orbital auction reference")
     }

@@ -39,10 +39,14 @@ pub contract OrbitalAuction {
             address: Address
         )
         pub fun getAuctionInfo(): [&Auction]
+        pub fun getAuctionMeta(_ auctionID: UInt64): &Meta
+        pub fun getAuctionBidderCount(_ auctionID: UInt64): Int
         pub fun getAuctionBidders(_ auctionID: UInt64): {Address: UFix64}
         pub fun logCurrentEpochInfo(_ auctionID: UInt64)
         pub fun logOrbInfo(auctionID: UInt64, orbID: UInt64)
-        pub fun logAllOrbInfo(auctionID: UInt64)
+        pub fun logAllOrbInfo(_ auctionID: UInt64)
+        pub fun logOrbBalance(auctionID: UInt64, orbID: UInt64)
+        pub fun logAllOrbBalances(_ auctionID: UInt64)
     }
 
     // AuctionAdmin is a resource interface that provides admin users
@@ -503,6 +507,21 @@ pub contract OrbitalAuction {
             return auctionInfo
         }
 
+        // getAuctionMeta takes an auctionID and returns a refernce to it's 
+        // Meta struct
+        pub fun getAuctionMeta(_ auctionID: UInt64): &Meta {
+            let auctionRef = self.borrowAuction(auctionID)
+            let auctionMeta = &auctionRef.meta as &Meta
+            return auctionMeta
+        }
+
+        // getAuctionBidderCount takes an auctionID and returns the length of
+        // the auction's bidders dictionary
+        pub fun getAuctionBidderCount(_ auctionID: UInt64): Int {
+            let auctionRef = self.borrowAuction(auctionID)
+            return auctionRef.bidders.length
+        }
+
         // TODO: Log methods are still being updated for the demo
         // logCurrentEpochInfo logs the state of the current Epoch
         pub fun logCurrentEpochInfo(_ auctionID: UInt64) {
@@ -515,7 +534,7 @@ pub contract OrbitalAuction {
             log(epoch.id)
             log("Current Block")
             log(getCurrentBlock().height)
-            log("End Block")
+            log("Epoch End Block")
             log(epoch.endBlock)
             log("Distribution")
             log(epoch.distribution.weights)
@@ -526,26 +545,51 @@ pub contract OrbitalAuction {
             let orb = auctionRef.borrowOrb(orbID)
             
             log("*************")
-            log("Orb ID")
-            log(orb.id)
-            log("***")
+            log("Orb ID: ".concat(orb.id.toString()))
+            log("*************")
             if let orbOwner = orb.bidder?.address {
-                log("Orb Owner")
-                log(orbOwner)
+                log("Orb Owner:")
+                log(orbOwner.toString())
             } else {
                 log("Orb is unowned")
             }
-            log("***")
-            log("Orb Balance")
-            log(orb.vault.balance)
+            log("*************")
+            log("Orb DemoToken Balance:")
+            log(orb.vault.balance.toString())
+            log("*************")
+            log("Orb Prize ID:")
+            if let orbPrizeID = orb.prize?.id {
+                log(orbPrizeID.toString())
+            } else {
+                log("Orb doesn't have a prize")
+            }
         }
 
-        pub fun logAllOrbInfo(auctionID: UInt64) {
+        pub fun logAllOrbInfo(_ auctionID: UInt64) {
             let auctionRef = self.borrowAuction(auctionID)
             let orbs = auctionRef.orbs.keys
 
             for id in orbs {
                 let orb = self.logOrbInfo(auctionID: auctionID, orbID: id)
+            }
+        }
+
+        pub fun logOrbBalance(auctionID: UInt64, orbID: UInt64) {
+            let auctionRef = self.borrowAuction(auctionID)
+            let orb = auctionRef.borrowOrb(orbID)
+
+            log("******************")
+            log("Orb ".concat(orb.id.toString()).concat(" Balance"))
+            log(orb.vault.balance)
+            log("******************")
+        }
+
+        pub fun logAllOrbBalances(_ auctionID: UInt64) {
+            let auctionRef = self.borrowAuction(auctionID)
+            let orbs = auctionRef.orbs.keys
+
+            for id in orbs {
+                let orb = self.logOrbBalance(auctionID: auctionID, orbID: id)
             }
         }
 
