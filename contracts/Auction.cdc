@@ -247,7 +247,7 @@ pub contract OrbitalAuction {
         **  if there are as many bidders in the auction as totalEpochs.
         **  If so, a new Epoch will be created and the auction will start.
         **
-        **  pub fun checkIsNextEpoch(_ auctionID: UInt64) {
+        **  pub fun checkAuctionStart(_ auctionID: UInt64) {
         **      let auctionRef = self.borrowAuction(auctionID)
         **        
         **      if auctionRef.bidders.length >= auctionRef.meta.totalEpochs {
