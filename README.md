@@ -25,6 +25,9 @@ We've put Cadence and the Flow blockchain to the test by performing all calculat
 5. Run `mv flow.sample.json flow.json` to rename `flow.sample.json` to `flow.json` 
 6. Run `flow emulator start -v` in terminal window 1
 7. Run `make` in terminal window 2
+ 
+- Blockchain output will appear in window 1 (`emulator window`)
+- Demo script instructions will appear in window 2 (`make window`)
 
 ## Technical Limitations and Future Additions
 
