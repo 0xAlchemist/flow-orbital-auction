@@ -114,6 +114,13 @@ pub contract OrbitalAuction {
             // are created
             self.addPrizeCollectionToAuction(auctionID, collection: <-prizes)
 
+            /*
+            **  TODO: Auction should not start until there are enough
+            **  bidders for each epoch.
+            **
+            **  This will need to change before launch.
+            */
+            
             // Create the first Epoch struct to begin the auction
             self.createNewEpoch(auctionID, epochID: UInt64(1))
 
@@ -234,6 +241,20 @@ pub contract OrbitalAuction {
             // Return the highest Bidder resource to the caller
             return <- highestBidder!
         }
+
+        /* 
+        **  TODO: We will need a checkAuctionStart() method to check
+        **  if there are as many bidders in the auction as totalEpochs.
+        **  If so, a new Epoch will be created and the auction will start.
+        **
+        **  pub fun checkIsNextEpoch(_ auctionID: UInt64) {
+        **      let auctionRef = self.borrowAuction(auctionID)
+        **        
+        **      if auctionRef.bidders.length >= auctionRef.meta.totalEpochs {
+        **          self.createNewEpoch(auctionID, epochID: UInt64(1))
+        **      }
+        **  }
+        */
 
         // checkIsNextEpoch runs the handleEndOfEpoch method if the
         // currentBlock height is greater than the endBlock number
@@ -954,6 +975,13 @@ pub contract OrbitalAuction {
             self.auctionID = auctionID
             self.totalEpochs = totalEpochs
             self.epochLength = epochLengthInBlocks
+
+            /*
+            **  TODO: This should start at 0. Once
+            **  there are as many bidders as total
+            **  Epochs in an auction, the first
+            **  Epoch will be created.
+            */
             self.currentEpoch = UInt64(1)
             self.auctionCompleted = false
         }

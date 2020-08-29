@@ -31,8 +31,8 @@ We've put Cadence and the Flow blockchain to the test by performing all calculat
 
 ## Technical Limitations and Future Additions
 
+- Does not wait for active bidders before starting the first Epoch
 - Does not handle a case where there are two competing "highest bids"
-- Does not handle a case where there are no bids for an Epoch
 - There is no commission percentage for auction host or token sellers
 - There is no method to safely return Rocks (NFTs) to the auction host's collection
 
