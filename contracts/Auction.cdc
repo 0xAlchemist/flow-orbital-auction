@@ -1,6 +1,7 @@
 // Auction.cdc
 //
-// The Orbital Auction contract is a mathematical Auction game on the Flow blockchain.
+// The Orbital Auction contract is a mathematical Auction game on the Flow blockchain where you bid for NFT prizes. 
+// NFTs are distributed into Orbs which Players can make bids on and compete for ownership of.
 // 
 //
 import FungibleToken from 0xee82856bf20e2aa6
