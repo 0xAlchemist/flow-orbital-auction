@@ -544,8 +544,8 @@ pub contract OrbitalAuction {
             return auctionRef.bidders.length
         }
 
-        // TODO: Log methods are still being updated for the demo
         // logCurrentEpochInfo logs the state of the current Epoch
+        // to the emulator console
         pub fun logCurrentEpochInfo(_ auctionID: UInt64) {
             let auctionRef = self.borrowAuction(auctionID)
             let epoch = auctionRef.borrowCurrentEpoch()
@@ -562,6 +562,8 @@ pub contract OrbitalAuction {
             log(epoch.distribution.weights)
         }
 
+        // logOrbInfo logs the state of the Orb
+        // to the emulator console
         pub fun logOrbInfo(auctionID: UInt64, orbID: UInt64) {
             let auctionRef = self.borrowAuction(auctionID)
             let orb = auctionRef.borrowOrb(orbID)
@@ -587,6 +589,8 @@ pub contract OrbitalAuction {
             }
         }
 
+        // logAllOrbInfo logs the state of all Orbs in the auction
+        // to the emulator console
         pub fun logAllOrbInfo(_ auctionID: UInt64) {
             let auctionRef = self.borrowAuction(auctionID)
             let orbs = auctionRef.orbs.keys
@@ -596,6 +600,8 @@ pub contract OrbitalAuction {
             }
         }
 
+        // logOrbBalance logs the Orb ID and vault balance
+        // to the emulator console
         pub fun logOrbBalance(auctionID: UInt64, orbID: UInt64) {
             let auctionRef = self.borrowAuction(auctionID)
             let orb = auctionRef.borrowOrb(orbID)
@@ -606,6 +612,8 @@ pub contract OrbitalAuction {
             log("******************")
         }
 
+        // logAllOrbBalances logs the balances and IDs of all Orbs in 
+        // the auction to the emulator console
         pub fun logAllOrbBalances(_ auctionID: UInt64) {
             let auctionRef = self.borrowAuction(auctionID)
             let orbs = auctionRef.orbs.keys
